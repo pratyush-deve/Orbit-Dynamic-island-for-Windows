@@ -1,0 +1,67 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Backgrounds & Surfaces (Dark Charcoal / Obsidian) -->
+    <Color x:Key="Color.Background.Deep">#0D0D12</Color>
+    <Color x:Key="Color.Background.Charcoal">#13131A</Color>
+    <Color x:Key="Color.Background.Surface">#1A1A24</Color>
+    <Color x:Key="Color.Background.SurfaceElevated">#222230</Color>
+    
+    <!-- Neon Purple Accents & Glows -->
+    <Color x:Key="Color.Accent.Purple">#8A2BE2</Color>
+    <Color x:Key="Color.Accent.PurpleLight">#A855F7</Color>
+    <Color x:Key="Color.Accent.PurpleGlow">#C084FC</Color>
+    <Color x:Key="Color.Accent.PurpleSubtle">#3B2266</Color>
+    <Color x:Key="Color.Accent.Border">#5B21B6</Color>
+
+    <!-- Mascot Eye Elements -->
+    <Color x:Key="Color.Eye.Sclera">#FFFFFF</Color>
+    <Color x:Key="Color.Eye.Pupil">#111118</Color>
+    <Color x:Key="Color.Eye.PupilInner">#08080C</Color>
+    <Color x:Key="Color.Eye.Highlight">#E0E7FF</Color>
+
+    <!-- Text & Indicators -->
+    <Color x:Key="Color.Text.Primary">#F8FAFC</Color>
+    <Color x:Key="Color.Text.Secondary">#94A3B8</Color>
+    <Color x:Key="Color.Text.Muted">#64748B</Color>
+    <Color x:Key="Color.Status.Online">#22C55E</Color>
+
+    <!-- Solid Brushes -->
+    <SolidColorBrush x:Key="Brush.Background.Deep" Color="{StaticResource Color.Background.Deep}"/>
+    <SolidColorBrush x:Key="Brush.Background.Charcoal" Color="{StaticResource Color.Background.Charcoal}"/>
+    <SolidColorBrush x:Key="Brush.Background.Surface" Color="{StaticResource Color.Background.Surface}"/>
+    <SolidColorBrush x:Key="Brush.Background.SurfaceElevated" Color="{StaticResource Color.Background.SurfaceElevated}"/>
+
+    <SolidColorBrush x:Key="Brush.Accent.Purple" Color="{StaticResource Color.Accent.Purple}"/>
+    <SolidColorBrush x:Key="Brush.Accent.PurpleLight" Color="{StaticResource Color.Accent.PurpleLight}"/>
+    <SolidColorBrush x:Key="Brush.Accent.PurpleGlow" Color="{StaticResource Color.Accent.PurpleGlow}"/>
+    <SolidColorBrush x:Key="Brush.Accent.Border" Color="{StaticResource Color.Accent.Border}"/>
+
+    <SolidColorBrush x:Key="Brush.Eye.Sclera" Color="{StaticResource Color.Eye.Sclera}"/>
+    <SolidColorBrush x:Key="Brush.Eye.Pupil" Color="{StaticResource Color.Eye.Pupil}"/>
+    <SolidColorBrush x:Key="Brush.Eye.PupilInner" Color="{StaticResource Color.Eye.PupilInner}"/>
+    <SolidColorBrush x:Key="Brush.Eye.Highlight" Color="{StaticResource Color.Eye.Highlight}"/>
+
+    <SolidColorBrush x:Key="Brush.Text.Primary" Color="{StaticResource Color.Text.Primary}"/>
+    <SolidColorBrush x:Key="Brush.Text.Secondary" Color="{StaticResource Color.Text.Secondary}"/>
+    <SolidColorBrush x:Key="Brush.Text.Muted" Color="{StaticResource Color.Text.Muted}"/>
+    <SolidColorBrush x:Key="Brush.Status.Online" Color="{StaticResource Color.Status.Online}"/>
+
+    <!-- Gradients -->
+    <LinearGradientBrush x:Key="Brush.Gradient.CharcoalSurface" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#181822" Offset="0"/>
+        <GradientStop Color="#121218" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="Brush.Gradient.PillBorder" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#7C3AED" Offset="0"/>
+        <GradientStop Color="#3B0764" Offset="0.5"/>
+        <GradientStop Color="#4C1D95" Offset="1"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="Brush.Gradient.ExpandedHeader" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#241B38" Offset="0"/>
+        <GradientStop Color="#151320" Offset="1"/>
+    </LinearGradientBrush>
+
+</ResourceDictionary>

@@ -1,0 +1,400 @@
+<UserControl x:Class="Orbit.UI.Panels.ExpandedIsland"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mascot="clr-namespace:Orbit.UI.Mascot"
+             xmlns:components="clr-namespace:Orbit.UI.Components"
+             xmlns:panels="clr-namespace:Orbit.UI.Panels"
+             mc:Ignorable="d" 
+             d:DesignHeight="240" d:DesignWidth="440">
+
+    <Grid x:Name="RootIsland">
+        <!-- Main Island Card Frame -->
+        <Border Background="{DynamicResource Brush.Gradient.CharcoalSurface}"
+                BorderBrush="{DynamicResource Brush.Gradient.PillBorder}"
+                BorderThickness="1.5"
+                CornerRadius="24"
+                Margin="8">
+            <Border.Effect>
+                <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                  BlurRadius="28"
+                                  ShadowDepth="4"
+                                  Opacity="0.45"/>
+            </Border.Effect>
+
+            <Grid Margin="14,10,14,14">
+                <Grid.RowDefinitions>
+                    <!-- Row 0: Eyes Mascot (clicking collapses) -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Top-Left Task Manager Shortcut Button -->
+                <Button x:Name="BtnTaskManager"
+                        Grid.Row="0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Width="26"
+                        Height="22"
+                        Margin="2,2,0,0"
+                        ToolTip="Open Task Manager"
+                        Cursor="Hand"
+                        Click="OnTaskManagerClicked">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder"
+                                    Background="#221C30"
+                                    BorderBrush="#3D295F"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                                </Border.RenderTransform>
+
+                                <!-- Activity / Performance Pulse Line Icon -->
+                                <Path x:Name="GlyphActivity"
+                                      Data="M1,6 L4,6 L6.5,2 L9,10 L11.5,3.5 L13.5,6.5 L16,6"
+                                      Stroke="{DynamicResource Brush.Text.Muted}"
+                                      StrokeThickness="1.4"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            </Border>
+
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#352458"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                    <Setter TargetName="GlyphActivity" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                    <Setter TargetName="BtnBorder" Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                                              BlurRadius="8"
+                                                              ShadowDepth="0"
+                                                              Opacity="0.6"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#1C1032"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleGlow}"/>
+                                    <Setter TargetName="BtnBorder" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!-- 1. Expressive Mascot Eyes at the top -->
+                <mascot:EyeMascot x:Name="IslandMascot"
+                                  Grid.Row="0"
+                                  HorizontalAlignment="Center"
+                                  Margin="0,0,0,6"
+                                  Cursor="Hand"
+                                  ToolTip="Click to collapse"
+                                  MouseLeftButtonDown="OnMascotClicked"/>
+
+                <!-- Top-Right Tiny Text Hide Button (Hides to system tray) -->
+                <Button x:Name="BtnHidePanel"
+                        Grid.Row="0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Height="22"
+                        Margin="0,2,2,0"
+                        ToolTip="Hide ORBIT to system tray"
+                        Cursor="Hand"
+                        Click="OnHideButtonClicked">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder"
+                                    Background="#221C30"
+                                    BorderBrush="#3D295F"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="8,2"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                                </Border.RenderTransform>
+
+                                <TextBlock x:Name="BtnText"
+                                           Text="Hide"
+                                           FontFamily="{DynamicResource Font.Main}"
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.Text.Muted}"
+                                           VerticalAlignment="Center"
+                                           HorizontalAlignment="Center"/>
+                            </Border>
+
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#352458"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                    <Setter TargetName="BtnText" Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
+                                    <Setter TargetName="BtnBorder" Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                                              BlurRadius="8"
+                                                              ShadowDepth="0"
+                                                              Opacity="0.6"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#1C1032"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleGlow}"/>
+                                    <Setter TargetName="BtnBorder" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!-- 2. Body Content (Header Branding and 4 Jetpack Compose Navigation Cards) -->
+                <!-- 2. Body Content Container: Home 4-Cards View vs Active Apps Manager View -->
+                <Grid x:Name="IslandBodyContent"
+                      Grid.Row="1"
+                      Opacity="1.0"
+                      HorizontalAlignment="Stretch">
+
+                    <!-- View A: Four Navigation Cards (Home View) -->
+                    <StackPanel x:Name="HomeContentView"
+                                Visibility="Visible"
+                                Opacity="1.0"
+                                HorizontalAlignment="Stretch">
+
+                        <!-- Header Branding: ORBIT + v2.0 + Subtitle -->
+                        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock Text="ORBIT"
+                                           FontFamily="{DynamicResource Font.Main}"
+                                           FontSize="18"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.Text.Primary}">
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="12" Color="{DynamicResource Color.Accent.PurpleLight}" Opacity="0.55" ShadowDepth="0"/>
+                                    </TextBlock.Effect>
+                                </TextBlock>
+
+                                <Border Background="#2B1A4A"
+                                        BorderBrush="{DynamicResource Brush.Accent.Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="6,1"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="v2.0"
+                                               FontSize="9.5"
+                                               FontWeight="Bold"
+                                               Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                </Border>
+                            </StackPanel>
+
+                            <TextBlock Text="YOUR DESKTOP COMPANION"
+                                       FontFamily="{DynamicResource Font.Main}"
+                                       FontSize="9"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.Text.Muted}"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,3,0,0"/>
+                        </StackPanel>
+
+                        <!-- Four Interactive Navigation Cards in One Row (Jetpack Compose Style) -->
+                        <Grid HorizontalAlignment="Stretch">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                                <ColumnDefinition Width="1*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Card 1: Dev Mode -->
+                            <components:NavigationCard x:Name="CardDevMode"
+                                                       Grid.Column="0"
+                                                       Margin="0,0,5,0"
+                                                       CardBadge="DEV"
+                                                       CardLabel="Dev Mode"
+                                                       ToolTip="Developer Mode">
+                                <Border Background="#23173B"
+                                        BorderBrush="#532692"
+                                        BorderThickness="1"
+                                        CornerRadius="7"
+                                        Padding="7,3"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Center">
+                                    <TextBlock Text="&lt;/&gt;"
+                                               FontFamily="{DynamicResource Font.Mono}"
+                                               FontSize="12"
+                                               FontWeight="Bold"
+                                               Foreground="#C084FC"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center"/>
+                                </Border>
+                            </components:NavigationCard>
+
+                            <!-- Card 2: Active Apps -->
+                            <components:NavigationCard x:Name="CardActiveApps"
+                                                       Grid.Column="1"
+                                                       Margin="4,0,4,0"
+                                                       CardBadge="APPS"
+                                                       CardLabel="Active Apps"
+                                                       ToolTip="Active Applications"
+                                                       Click="OnCardActiveAppsClicked">
+                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <!-- Back Application Window Layer -->
+                                    <Border Width="20" Height="15"
+                                            CornerRadius="3"
+                                            Background="#1A142B"
+                                            BorderBrush="#4C2882"
+                                            BorderThickness="1"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"/>
+
+                                    <!-- Front Application Window Layer -->
+                                    <Border Width="22" Height="17"
+                                            CornerRadius="4"
+                                            Background="#291C44"
+                                            BorderBrush="#A855F7"
+                                            BorderThickness="1.2"
+                                            HorizontalAlignment="Left"
+                                            VerticalAlignment="Bottom">
+                                        <Grid Margin="3,2">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="*"/>
+                                            </Grid.RowDefinitions>
+                                            <!-- Mini Window Titlebar Dots -->
+                                            <StackPanel Orientation="Horizontal" Grid.Row="0">
+                                                <Ellipse Width="2.5" Height="2.5" Fill="#C084FC" Margin="0,0,1.5,0"/>
+                                                <Ellipse Width="2.5" Height="2.5" Fill="#A855F7" Margin="0,0,1.5,0"/>
+                                                <Ellipse Width="2.5" Height="2.5" Fill="#6B21A8"/>
+                                            </StackPanel>
+                                            <!-- Application Content Lines -->
+                                            <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,1.5,0,0">
+                                                <Rectangle Height="1.5" Fill="#6D28D9" RadiusX="0.75" RadiusY="0.75" Margin="0,0,3,1.5"/>
+                                                <Rectangle Height="1.5" Fill="#4C1D95" RadiusX="0.75" RadiusY="0.75" Margin="0,0,6,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </components:NavigationCard>
+
+                            <!-- Card 3: AI Agent -->
+                            <components:NavigationCard x:Name="CardAiAgent"
+                                                       Grid.Column="2"
+                                                       Margin="4,0,4,0"
+                                                       CardBadge="AI"
+                                                       CardLabel="AI Agent"
+                                                       ToolTip="AI Agent Companion">
+                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <!-- Primary 4-point AI neural sparkle -->
+                                    <Path Data="M12,1 C12,6.5 14,8.5 20,11 C14,13.5 12,15.5 12,21 C12,15.5 10,13.5 4,11 C10,8.5 12,6.5 12,1 Z"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                                        <Path.Fill>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="#F3E8FF" Offset="0"/>
+                                                <GradientStop Color="#A855F7" Offset="0.6"/>
+                                                <GradientStop Color="#7C3AED" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Path.Fill>
+                                        <Path.Effect>
+                                            <DropShadowEffect Color="#C084FC" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                        </Path.Effect>
+                                    </Path>
+
+                                    <!-- Secondary micro sparkle (Top-Right) -->
+                                    <Path Data="M22,1 C22,3 22.5,3.5 24.5,5 C22.5,6.5 22,7 22,9 C22,7 21.5,6.5 19.5,5 C21.5,3.5 22,3 22,1 Z"
+                                          Fill="#E9D5FF"
+                                          HorizontalAlignment="Right"
+                                          VerticalAlignment="Top"
+                                          Margin="0,0,1,0"/>
+                                </Grid>
+                            </components:NavigationCard>
+
+                            <!-- Card 4: Quick Controls -->
+                            <components:NavigationCard x:Name="CardControls"
+                                                       Grid.Column="3"
+                                                       Margin="5,0,0,0"
+                                                       CardBadge="CTRL"
+                                                       CardLabel="Controls"
+                                                       ToolTip="Quick Controls">
+                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="1*"/>
+                                        <RowDefinition Height="1*"/>
+                                    </Grid.RowDefinitions>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="1*"/>
+                                        <ColumnDefinition Width="1*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- 1. Wi-Fi wave icon (Top-Left) -->
+                                    <Canvas Grid.Row="0" Grid.Column="0" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path Data="M1,2 A7,7 0 0,1 11,2" Stroke="#C084FC" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Path Data="M3,4.5 A4.5,4.5 0 0,1 9,4.5" Stroke="#A855F7" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Path Data="M5,7 A2,2 0 0,1 7,7" Stroke="#8A2BE2" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Ellipse Canvas.Left="5.25" Canvas.Top="8.5" Width="1.5" Height="1.5" Fill="#F8FAFC"/>
+                                    </Canvas>
+
+                                    <!-- 2. Bluetooth rune icon (Top-Right) -->
+                                    <Canvas Grid.Row="0" Grid.Column="1" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Path Data="M4,0.5 L8,3.5 L5,5.5 L8,7.5 L4,10.5 M4,0.5 L4,10.5 M4,3.5 L7.5,5.5 L4,7.5"
+                                              Stroke="#C084FC"
+                                              StrokeThickness="1.1"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"/>
+                                    </Canvas>
+
+                                    <!-- 3. Microphone icon (Bottom-Left) -->
+                                    <Canvas Grid.Row="1" Grid.Column="0" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- Mic capsule -->
+                                        <Rectangle Canvas.Left="4" Canvas.Top="0.5" Width="4" Height="6" RadiusX="2" RadiusY="2"
+                                                   Fill="#2A1846" Stroke="#A855F7" StrokeThickness="1"/>
+                                        <!-- Mic cup & stand -->
+                                        <Path Data="M2,4 A4,4 0 0,0 10,4 M6,7.5 L6,10 M3.5,10 L8.5,10"
+                                              Stroke="#A855F7" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                    </Canvas>
+
+                                    <!-- 4. Audio/Speaker icon (Bottom-Right) -->
+                                    <Canvas Grid.Row="1" Grid.Column="1" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <!-- Speaker cone -->
+                                        <Path Data="M1.5,4 L3.5,4 L6.5,1.5 L6.5,9.5 L3.5,7 L1.5,7 Z"
+                                              Fill="#2A1846" Stroke="#C084FC" StrokeThickness="1" StrokeLineJoin="Round"/>
+                                        <!-- Sound waves -->
+                                        <Path Data="M8.5,3.5 A3.5,3.5 0 0,1 8.5,7.5 M10.5,1.8 A6,6 0 0,1 10.5,9.2"
+                                              Stroke="#C084FC" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                    </Canvas>
+                                </Grid>
+                            </components:NavigationCard>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- View B: Active Apps Manager View -->
+                    <Grid x:Name="ActiveAppsContainer"
+                          Visibility="Collapsed"
+                          Opacity="0.0"
+                          HorizontalAlignment="Stretch">
+                        <panels:ActiveAppsView x:Name="ActiveAppsPanel"
+                                               BackRequested="OnActiveAppsBackRequested"/>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

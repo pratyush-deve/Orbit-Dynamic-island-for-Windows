@@ -1,0 +1,336 @@
+<UserControl x:Class="Orbit.UI.Panels.ActiveAppsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:components="clr-namespace:Orbit.UI.Components"
+             mc:Ignorable="d" 
+             d:DesignHeight="260" d:DesignWidth="400">
+
+    <UserControl.Resources>
+        <!-- Sleek Custom ScrollBar Styles -->
+        <Style x:Key="OrbitScrollBarThumb" TargetType="{x:Type Thumb}">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="IsTabStop" Value="False"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border CornerRadius="3"
+                                Background="#4A2F74"
+                                Width="5"
+                                Margin="1,0"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#A855F7"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter Property="Background" Value="#C084FC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OrbitScrollBar" TargetType="{x:Type ScrollBar}">
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource OrbitScrollBarThumb}"/>
+                            </Track.Thumb>
+                        </Track>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="OrbitScrollViewer" TargetType="{x:Type ScrollViewer}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollViewer}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <ScrollContentPresenter x:Name="PART_ScrollContentPresenter"
+                                                   Grid.Column="0"
+                                                   CanContentScroll="False"
+                                                   Content="{TemplateBinding Content}"
+                                                   ContentTemplate="{TemplateBinding ContentTemplate}"/>
+                            <ScrollBar x:Name="PART_VerticalScrollBar"
+                                       Grid.Column="1"
+                                       Orientation="Vertical"
+                                       Style="{StaticResource OrbitScrollBar}"
+                                       Value="{TemplateBinding VerticalOffset}"
+                                       Maximum="{TemplateBinding ScrollableHeight}"
+                                       ViewportSize="{TemplateBinding ViewportHeight}"
+                                       Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Top" Background="Transparent" MouseLeftButtonDown="OnViewBackgroundMouseDown">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Header with Back Button, Title, and App Count Badge -->
+            <RowDefinition Height="Auto"/>
+            <!-- Row 1: Responsive Grid of Applications -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- 1. Header Toolbar -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <!-- Back Button -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Title & Count Badge -->
+                <ColumnDefinition Width="*"/>
+                <!-- Optional Refresh Button -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Back to Home Button -->
+            <Button x:Name="BtnBack"
+                    Grid.Column="0"
+                    Width="24"
+                    Height="24"
+                    VerticalAlignment="Center"
+                    ToolTip="Back to Home"
+                    Cursor="Hand"
+                    Click="OnBackClicked">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BackBorder"
+                                Background="#221834"
+                                BorderBrush="#472C6F"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+
+                            <!-- Left Arrow Glyph -->
+                            <Path x:Name="ArrowGlyph"
+                                  Data="M9,4 L5,8 L9,12 M5,8 L13,8"
+                                  Stroke="{DynamicResource Brush.Text.Muted}"
+                                  StrokeThickness="1.4"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#352458"/>
+                                <Setter TargetName="BackBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <Setter TargetName="ArrowGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <Setter TargetName="BackBorder" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                                          BlurRadius="8"
+                                                          ShadowDepth="0"
+                                                          Opacity="0.6"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#1C1032"/>
+                                <Setter TargetName="BackBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleGlow}"/>
+                                <Setter TargetName="BackBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- Title & Count Badge -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                <TextBlock Text="Active Apps"
+                           FontFamily="{DynamicResource Font.Main}"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           VerticalAlignment="Center"/>
+
+                <Border x:Name="BadgeCount"
+                        Background="#2B1A4A"
+                        BorderBrush="{DynamicResource Brush.Accent.Border}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="6,1"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtAppCount"
+                               Text="0 Windows"
+                               FontSize="9.5"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Refresh Button -->
+            <Button x:Name="BtnRefresh"
+                    Grid.Column="2"
+                    Width="24"
+                    Height="24"
+                    VerticalAlignment="Center"
+                    ToolTip="Refresh Window List"
+                    Cursor="Hand"
+                    Click="OnRefreshClicked">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="RefreshBorder"
+                                Background="#221834"
+                                BorderBrush="#472C6F"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+
+                            <!-- Refresh Circular Arrow Glyph -->
+                            <Path x:Name="RefreshGlyph"
+                                  Data="M11,4 A4.5,4.5 0 1,0 13.5,8.5 M11,1.5 L11,4 L13.5,4"
+                                  Stroke="{DynamicResource Brush.Text.Muted}"
+                                  StrokeThickness="1.3"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RefreshBorder" Property="Background" Value="#352458"/>
+                                <Setter TargetName="RefreshBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <Setter TargetName="RefreshGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="RefreshBorder" Property="Background" Value="#1C1032"/>
+                                <Setter TargetName="RefreshBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+
+        <!-- 2. Responsive Application Grid / Scroll Container -->
+        <ScrollViewer x:Name="GridScrollViewer"
+                      Grid.Row="1"
+                      Style="{StaticResource OrbitScrollViewer}"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="260">
+            <Grid>
+                <!-- Application Cards Grid -->
+                <ItemsControl x:Name="AppsItemsControl">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Columns="3" HorizontalAlignment="Stretch"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <components:ApplicationCard WindowInfo="{Binding}"
+                                                        Margin="3,3,3,3"
+                                                        Activated="OnCardActivated"
+                                                        CloseRequested="OnCardCloseRequested"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Loading State Indicator -->
+                <Border x:Name="LoadingStateBorder"
+                        Visibility="Collapsed"
+                        Padding="25"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center">
+                        <ProgressBar IsIndeterminate="True"
+                                     Width="70"
+                                     Height="3"
+                                     Foreground="{DynamicResource Brush.Accent.PurpleLight}"
+                                     Background="#251640"
+                                     BorderThickness="0"/>
+                        <TextBlock Text="Loading applications..."
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="10"
+                                   Foreground="{DynamicResource Brush.Text.Muted}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,8,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Empty State Message when 0 windows found -->
+                <Border x:Name="EmptyStateBorder"
+                        Visibility="Collapsed"
+                        Padding="20"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="No active application windows"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Muted}"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Open an application to view it here"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="9.5"
+                                   Foreground="{DynamicResource Brush.Text.Secondary}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Error State Message if enumeration fails -->
+                <Border x:Name="ErrorStateBorder"
+                        Visibility="Collapsed"
+                        Padding="20"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="Unable to load active windows"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#F87171"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TxtErrorMessage"
+                                   Text="An error occurred while inspecting desktop windows."
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="9.5"
+                                   Foreground="{DynamicResource Brush.Text.Muted}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,3,0,6"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

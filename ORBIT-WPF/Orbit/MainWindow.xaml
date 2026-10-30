@@ -1,0 +1,58 @@
+<Window x:Class="Orbit.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:mascot="clr-namespace:Orbit.UI.Mascot"
+        xmlns:panels="clr-namespace:Orbit.UI.Panels"
+        mc:Ignorable="d"
+        Title="ORBIT"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ResizeMode="NoResize"
+        Width="140"
+        Height="56"
+        SizeToContent="Manual"
+        SnapsToDevicePixels="True"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        MouseMove="OnWindowMouseMove"
+        MouseLeave="OnWindowMouseLeave">
+
+    <Grid x:Name="RootLayout" Background="Transparent">
+        
+        <!-- STATE A: COLLAPSED (Pill with Eyes) -->
+        <Grid x:Name="CollapsedView"
+              Opacity="1.0"
+              Visibility="Visible"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch"
+              Background="Transparent"
+              Cursor="Hand"
+              ToolTip="Click to expand ORBIT"
+              MouseLeftButtonDown="OnMascotClick">
+            
+            <mascot:EyeMascot x:Name="PillMascot"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              IsHitTestVisible="False"/>
+        </Grid>
+
+        <!-- STATE B: EXPANDED (Island Card) -->
+        <Grid x:Name="ExpandedView"
+              Opacity="1.0"
+              Visibility="Collapsed"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
+            
+            <panels:ExpandedIsland x:Name="IslandPanel"
+                                   CollapseRequested="OnIslandCollapseRequested"
+                                   HideRequested="OnHideRequested"/>
+        </Grid>
+
+    </Grid>
+</Window>
