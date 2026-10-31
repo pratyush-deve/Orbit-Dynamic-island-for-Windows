@@ -170,6 +170,8 @@ public partial class ExpandedIsland : UserControl
         HomeContentView.Visibility = Visibility.Visible;
         HomeContentView.Opacity = 1.0;
 
+        HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
+
         DesiredHeightChanged?.Invoke(240.0);
     }
 
@@ -527,6 +529,31 @@ public partial class ExpandedIsland : UserControl
             HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
         };
         AiMonitorContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnHomeCardsScrollViewerPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is ScrollViewer sv && sv.ScrollableWidth > 0)
+        {
+            // Standard vertical mouse wheel delta is typically +/-120 per notch.
+            // Scale by 0.75 (~90 DIPs per notch) to scroll sideways by approximately one card width.
+            double scrollDelta = -e.Delta * 0.75;
+            double targetOffset = Math.Clamp(sv.HorizontalOffset + scrollDelta, 0, sv.ScrollableWidth);
+            sv.ScrollToHorizontalOffset(targetOffset);
+            e.Handled = true;
+        }
+    }
+
+    private void OnCardSocialClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        OrbitLogger.Info(LogCategory, "SOCIAL card clicked (UI placeholder).");
+    }
+
+    private void OnCardDocsClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        OrbitLogger.Info(LogCategory, "DOCS card clicked (UI placeholder).");
     }
 
     private void OnMascotClicked(object sender, MouseButtonEventArgs e)

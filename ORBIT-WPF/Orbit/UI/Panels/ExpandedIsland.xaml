@@ -213,179 +213,275 @@
                                        Margin="0,3,0,0"/>
                         </StackPanel>
 
-                        <!-- Four Interactive Navigation Cards in One Row (Jetpack Compose Style) -->
-                        <Grid HorizontalAlignment="Stretch">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="1*"/>
-                                <ColumnDefinition Width="1*"/>
-                                <ColumnDefinition Width="1*"/>
-                                <ColumnDefinition Width="1*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <!-- Card 1: Dev Mode -->
-                            <components:NavigationCard x:Name="CardDevMode"
-                                                       Grid.Column="0"
-                                                       Margin="0,0,5,0"
-                                                       CardBadge="DEV"
-                                                       CardLabel="Dev Mode"
-                                                       ToolTip="Developer Workspace"
-                                                       Click="OnCardDevModeClicked">
-                                <Border Background="#23173B"
-                                        BorderBrush="#532692"
-                                        BorderThickness="1"
-                                        CornerRadius="7"
-                                        Padding="7,3"
-                                        VerticalAlignment="Center"
-                                        HorizontalAlignment="Center">
-                                    <TextBlock Text="&lt;/&gt;"
-                                               FontFamily="{DynamicResource Font.Mono}"
-                                               FontSize="12"
-                                               FontWeight="Bold"
-                                               Foreground="#C084FC"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center"/>
-                                </Border>
-                            </components:NavigationCard>
-
-                            <!-- Card 2: Active Apps -->
-                            <components:NavigationCard x:Name="CardActiveApps"
-                                                       Grid.Column="1"
-                                                       Margin="4,0,4,0"
-                                                       CardBadge="APPS"
-                                                       CardLabel="Active Apps"
-                                                       ToolTip="Active Applications"
-                                                       Click="OnCardActiveAppsClicked">
-                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <!-- Back Application Window Layer -->
-                                    <Border Width="20" Height="15"
-                                            CornerRadius="3"
-                                            Background="#1A142B"
-                                            BorderBrush="#4C2882"
+                        <!-- Horizontally Scrollable Interactive Navigation Cards Row -->
+                        <ScrollViewer x:Name="HomeCardsScrollViewer"
+                                      HorizontalScrollBarVisibility="Hidden"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Center"
+                                      Focusable="False"
+                                      CanContentScroll="False"
+                                      PanningMode="HorizontalOnly"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      Padding="0"
+                                      PreviewMouseWheel="OnHomeCardsScrollViewerPreviewMouseWheel">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,4,2,8">
+                                <!-- Card 1: Dev Mode -->
+                                <components:NavigationCard x:Name="CardDevMode"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,10,0"
+                                                           CardBadge="DEV"
+                                                           CardLabel="Dev Mode"
+                                                           ToolTip="Developer Workspace"
+                                                           Click="OnCardDevModeClicked">
+                                    <Border Background="#23173B"
+                                            BorderBrush="#532692"
                                             BorderThickness="1"
-                                            HorizontalAlignment="Right"
-                                            VerticalAlignment="Top"/>
-
-                                    <!-- Front Application Window Layer -->
-                                    <Border Width="22" Height="17"
-                                            CornerRadius="4"
-                                            Background="#291C44"
-                                            BorderBrush="#A855F7"
-                                            BorderThickness="1.2"
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Bottom">
-                                        <Grid Margin="3,2">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="*"/>
-                                            </Grid.RowDefinitions>
-                                            <!-- Mini Window Titlebar Dots -->
-                                            <StackPanel Orientation="Horizontal" Grid.Row="0">
-                                                <Ellipse Width="2.5" Height="2.5" Fill="#C084FC" Margin="0,0,1.5,0"/>
-                                                <Ellipse Width="2.5" Height="2.5" Fill="#A855F7" Margin="0,0,1.5,0"/>
-                                                <Ellipse Width="2.5" Height="2.5" Fill="#6B21A8"/>
-                                            </StackPanel>
-                                            <!-- Application Content Lines -->
-                                            <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,1.5,0,0">
-                                                <Rectangle Height="1.5" Fill="#6D28D9" RadiusX="0.75" RadiusY="0.75" Margin="0,0,3,1.5"/>
-                                                <Rectangle Height="1.5" Fill="#4C1D95" RadiusX="0.75" RadiusY="0.75" Margin="0,0,6,0"/>
-                                            </StackPanel>
-                                        </Grid>
+                                            CornerRadius="7"
+                                            Padding="7,3"
+                                            VerticalAlignment="Center"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="&lt;/&gt;"
+                                                   FontFamily="{DynamicResource Font.Mono}"
+                                                   FontSize="12"
+                                                   FontWeight="Bold"
+                                                   Foreground="#C084FC"
+                                                   VerticalAlignment="Center"
+                                                   HorizontalAlignment="Center"/>
                                     </Border>
-                                </Grid>
-                            </components:NavigationCard>
+                                </components:NavigationCard>
 
-                            <!-- Card 3: AI Agent -->
-                            <components:NavigationCard x:Name="CardAiAgent"
-                                                       Grid.Column="2"
-                                                       Margin="4,0,4,0"
-                                                       CardBadge="AI"
-                                                       CardLabel="AI Agent"
-                                                       ToolTip="AI Agent Monitor"
-                                                       Click="OnCardAiAgentClicked">
-                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <!-- Primary 4-point AI neural sparkle -->
-                                    <Path Data="M12,1 C12,6.5 14,8.5 20,11 C14,13.5 12,15.5 12,21 C12,15.5 10,13.5 4,11 C10,8.5 12,6.5 12,1 Z"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center">
-                                        <Path.Fill>
-                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                                <GradientStop Color="#F3E8FF" Offset="0"/>
-                                                <GradientStop Color="#A855F7" Offset="0.6"/>
-                                                <GradientStop Color="#7C3AED" Offset="1"/>
-                                            </LinearGradientBrush>
-                                        </Path.Fill>
-                                        <Path.Effect>
-                                            <DropShadowEffect Color="#C084FC" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
-                                        </Path.Effect>
-                                    </Path>
+                                <!-- Card 2: Active Apps -->
+                                <components:NavigationCard x:Name="CardActiveApps"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,10,0"
+                                                           CardBadge="APPS"
+                                                           CardLabel="Active Apps"
+                                                           ToolTip="Active Applications"
+                                                           Click="OnCardActiveAppsClicked">
+                                    <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <!-- Back Application Window Layer -->
+                                        <Border Width="20" Height="15"
+                                                CornerRadius="3"
+                                                Background="#1A142B"
+                                                BorderBrush="#4C2882"
+                                                BorderThickness="1"
+                                                HorizontalAlignment="Right"
+                                                VerticalAlignment="Top"/>
 
-                                    <!-- Secondary micro sparkle (Top-Right) -->
-                                    <Path Data="M22,1 C22,3 22.5,3.5 24.5,5 C22.5,6.5 22,7 22,9 C22,7 21.5,6.5 19.5,5 C21.5,3.5 22,3 22,1 Z"
-                                          Fill="#E9D5FF"
-                                          HorizontalAlignment="Right"
-                                          VerticalAlignment="Top"
-                                          Margin="0,0,1,0"/>
-                                </Grid>
-                            </components:NavigationCard>
+                                        <!-- Front Application Window Layer -->
+                                        <Border Width="22" Height="17"
+                                                CornerRadius="4"
+                                                Background="#291C44"
+                                                BorderBrush="#A855F7"
+                                                BorderThickness="1.2"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Bottom">
+                                            <Grid Margin="3,2">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="*"/>
+                                                </Grid.RowDefinitions>
+                                                <!-- Mini Window Titlebar Dots -->
+                                                <StackPanel Orientation="Horizontal" Grid.Row="0">
+                                                    <Ellipse Width="2.5" Height="2.5" Fill="#C084FC" Margin="0,0,1.5,0"/>
+                                                    <Ellipse Width="2.5" Height="2.5" Fill="#A855F7" Margin="0,0,1.5,0"/>
+                                                    <Ellipse Width="2.5" Height="2.5" Fill="#6B21A8"/>
+                                                </StackPanel>
+                                                <!-- Application Content Lines -->
+                                                <StackPanel Grid.Row="1" VerticalAlignment="Center" Margin="0,1.5,0,0">
+                                                    <Rectangle Height="1.5" Fill="#6D28D9" RadiusX="0.75" RadiusY="0.75" Margin="0,0,3,1.5"/>
+                                                    <Rectangle Height="1.5" Fill="#4C1D95" RadiusX="0.75" RadiusY="0.75" Margin="0,0,6,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </components:NavigationCard>
 
-                            <!-- Card 4: Quick Controls -->
-                            <components:NavigationCard x:Name="CardControls"
-                                                       Grid.Column="3"
-                                                       Margin="5,0,0,0"
-                                                       CardBadge="CTRL"
-                                                       CardLabel="Controls"
-                                                       ToolTip="Quick Controls"
-                                                       Click="OnCardControlsClicked">
-                                <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="1*"/>
-                                        <RowDefinition Height="1*"/>
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="1*"/>
-                                        <ColumnDefinition Width="1*"/>
-                                    </Grid.ColumnDefinitions>
+                                <!-- Card 3: AI Agent -->
+                                <components:NavigationCard x:Name="CardAiAgent"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,10,0"
+                                                           CardBadge="AI"
+                                                           CardLabel="AI Agent"
+                                                           ToolTip="AI Agent Monitor"
+                                                           Click="OnCardAiAgentClicked">
+                                    <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <!-- Primary 4-point AI neural sparkle -->
+                                        <Path Data="M12,1 C12,6.5 14,8.5 20,11 C14,13.5 12,15.5 12,21 C12,15.5 10,13.5 4,11 C10,8.5 12,6.5 12,1 Z"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center">
+                                            <Path.Fill>
+                                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                    <GradientStop Color="#F3E8FF" Offset="0"/>
+                                                    <GradientStop Color="#A855F7" Offset="0.6"/>
+                                                    <GradientStop Color="#7C3AED" Offset="1"/>
+                                                </LinearGradientBrush>
+                                            </Path.Fill>
+                                            <Path.Effect>
+                                                <DropShadowEffect Color="#C084FC" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                            </Path.Effect>
+                                        </Path>
 
-                                    <!-- 1. Wi-Fi wave icon (Top-Left) -->
-                                    <Canvas Grid.Row="0" Grid.Column="0" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Path Data="M1,2 A7,7 0 0,1 11,2" Stroke="#C084FC" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                        <Path Data="M3,4.5 A4.5,4.5 0 0,1 9,4.5" Stroke="#A855F7" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                        <Path Data="M5,7 A2,2 0 0,1 7,7" Stroke="#8A2BE2" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                        <Ellipse Canvas.Left="5.25" Canvas.Top="8.5" Width="1.5" Height="1.5" Fill="#F8FAFC"/>
-                                    </Canvas>
+                                        <!-- Secondary micro sparkle (Top-Right) -->
+                                        <Path Data="M22,1 C22,3 22.5,3.5 24.5,5 C22.5,6.5 22,7 22,9 C22,7 21.5,6.5 19.5,5 C21.5,3.5 22,3 22,1 Z"
+                                              Fill="#E9D5FF"
+                                              HorizontalAlignment="Right"
+                                              VerticalAlignment="Top"
+                                              Margin="0,0,1,0"/>
+                                    </Grid>
+                                </components:NavigationCard>
 
-                                    <!-- 2. Bluetooth rune icon (Top-Right) -->
-                                    <Canvas Grid.Row="0" Grid.Column="1" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <Path Data="M4,0.5 L8,3.5 L5,5.5 L8,7.5 L4,10.5 M4,0.5 L4,10.5 M4,3.5 L7.5,5.5 L4,7.5"
-                                              Stroke="#C084FC"
-                                              StrokeThickness="1.1"
-                                              StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"/>
-                                    </Canvas>
+                                <!-- Card 4: Quick Controls -->
+                                <components:NavigationCard x:Name="CardControls"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,10,0"
+                                                           CardBadge="CTRL"
+                                                           CardLabel="Controls"
+                                                           ToolTip="Quick Controls"
+                                                           Click="OnCardControlsClicked">
+                                    <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="1*"/>
+                                            <RowDefinition Height="1*"/>
+                                        </Grid.RowDefinitions>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="1*"/>
+                                            <ColumnDefinition Width="1*"/>
+                                        </Grid.ColumnDefinitions>
 
-                                    <!-- 3. Microphone icon (Bottom-Left) -->
-                                    <Canvas Grid.Row="1" Grid.Column="0" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <!-- Mic capsule -->
-                                        <Rectangle Canvas.Left="4" Canvas.Top="0.5" Width="4" Height="6" RadiusX="2" RadiusY="2"
-                                                   Fill="#2A1846" Stroke="#A855F7" StrokeThickness="1"/>
-                                        <!-- Mic cup & stand -->
-                                        <Path Data="M2,4 A4,4 0 0,0 10,4 M6,7.5 L6,10 M3.5,10 L8.5,10"
-                                              Stroke="#A855F7" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                    </Canvas>
+                                        <!-- 1. Wi-Fi wave icon (Top-Left) -->
+                                        <Canvas Grid.Row="0" Grid.Column="0" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path Data="M1,2 A7,7 0 0,1 11,2" Stroke="#C084FC" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Path Data="M3,4.5 A4.5,4.5 0 0,1 9,4.5" Stroke="#A855F7" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Path Data="M5,7 A2,2 0 0,1 7,7" Stroke="#8A2BE2" StrokeThickness="1.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                            <Ellipse Canvas.Left="5.25" Canvas.Top="8.5" Width="1.5" Height="1.5" Fill="#F8FAFC"/>
+                                        </Canvas>
 
-                                    <!-- 4. Audio/Speaker icon (Bottom-Right) -->
-                                    <Canvas Grid.Row="1" Grid.Column="1" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                        <!-- Speaker cone -->
-                                        <Path Data="M1.5,4 L3.5,4 L6.5,1.5 L6.5,9.5 L3.5,7 L1.5,7 Z"
-                                              Fill="#2A1846" Stroke="#C084FC" StrokeThickness="1" StrokeLineJoin="Round"/>
-                                        <!-- Sound waves -->
-                                        <Path Data="M8.5,3.5 A3.5,3.5 0 0,1 8.5,7.5 M10.5,1.8 A6,6 0 0,1 10.5,9.2"
-                                              Stroke="#C084FC" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
-                                    </Canvas>
-                                </Grid>
-                            </components:NavigationCard>
-                        </Grid>
+                                        <!-- 2. Bluetooth rune icon (Top-Right) -->
+                                        <Canvas Grid.Row="0" Grid.Column="1" Width="12" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <Path Data="M4,0.5 L8,3.5 L5,5.5 L8,7.5 L4,10.5 M4,0.5 L4,10.5 M4,3.5 L7.5,5.5 L4,7.5"
+                                                  Stroke="#C084FC"
+                                                  StrokeThickness="1.1"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"
+                                                  StrokeLineJoin="Round"/>
+                                        </Canvas>
+
+                                        <!-- 3. Microphone icon (Bottom-Left) -->
+                                        <Canvas Grid.Row="1" Grid.Column="0" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Mic capsule -->
+                                            <Rectangle Canvas.Left="4" Canvas.Top="0.5" Width="4" Height="6" RadiusX="2" RadiusY="2"
+                                                       Fill="#2A1846" Stroke="#A855F7" StrokeThickness="1"/>
+                                            <!-- Mic cup & stand -->
+                                            <Path Data="M2,4 A4,4 0 0,0 10,4 M6,7.5 L6,10 M3.5,10 L8.5,10"
+                                                  Stroke="#A855F7" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        </Canvas>
+
+                                        <!-- 4. Audio/Speaker icon (Bottom-Right) -->
+                                        <Canvas Grid.Row="1" Grid.Column="1" Width="12" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Speaker cone -->
+                                            <Path Data="M1.5,4 L3.5,4 L6.5,1.5 L6.5,9.5 L3.5,7 L1.5,7 Z"
+                                                  Fill="#2A1846" Stroke="#C084FC" StrokeThickness="1" StrokeLineJoin="Round"/>
+                                            <!-- Sound waves -->
+                                            <Path Data="M8.5,3.5 A3.5,3.5 0 0,1 8.5,7.5 M10.5,1.8 A6,6 0 0,1 10.5,9.2"
+                                                  Stroke="#C084FC" StrokeThickness="1" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        </Canvas>
+                                    </Grid>
+                                </components:NavigationCard>
+
+                                <!-- Card 5: Social Hub -->
+                                <components:NavigationCard x:Name="CardSocial"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,10,0"
+                                                           CardBadge="SOCIAL"
+                                                           CardLabel="Social Hub"
+                                                           ToolTip="Social Hub"
+                                                           Click="OnCardSocialClicked">
+                                    <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <Canvas Width="24" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Back User (Purple Muted) -->
+                                            <Path Data="M16,3.5 A3.5,3.5 0 0,1 16,10.5"
+                                                  Stroke="#7C3AED"
+                                                  StrokeThickness="1.4"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"/>
+                                            <Path Data="M20.5,19.5 C20.5,16.5 18,14.5 15.5,14"
+                                                  Stroke="#7C3AED"
+                                                  StrokeThickness="1.4"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"/>
+
+                                            <!-- Front User (Bright Glowing Purple) -->
+                                            <Ellipse Canvas.Left="4" Canvas.Top="2"
+                                                     Width="7.5" Height="7.5"
+                                                     Stroke="#C084FC"
+                                                     StrokeThickness="1.4"
+                                                     Fill="#201538"/>
+                                            <Path Data="M1.5,19.5 C1.5,15.5 4.5,13.5 7.8,13.5 C11,13.5 14,15.5 14,19.5"
+                                                  Stroke="#C084FC"
+                                                  StrokeThickness="1.4"
+                                                  StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round"/>
+
+                                            <!-- Active Social Notification Indicator -->
+                                            <Ellipse Canvas.Left="19" Canvas.Top="2"
+                                                     Width="3" Height="3"
+                                                     Fill="#C084FC">
+                                                <Ellipse.Effect>
+                                                    <DropShadowEffect Color="#C084FC" BlurRadius="4" ShadowDepth="0" Opacity="0.9"/>
+                                                </Ellipse.Effect>
+                                            </Ellipse>
+                                        </Canvas>
+                                    </Grid>
+                                </components:NavigationCard>
+
+                                <!-- Card 6: Documents -->
+                                <components:NavigationCard x:Name="CardDocs"
+                                                           Width="94"
+                                                           Height="92"
+                                                           Margin="0,0,0,0"
+                                                           CardBadge="DOCS"
+                                                           CardLabel="Documents"
+                                                           ToolTip="Documents"
+                                                           Click="OnCardDocsClicked">
+                                    <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                        <Canvas Width="24" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <!-- Back Document Sheet -->
+                                            <Border Canvas.Left="6" Canvas.Top="1"
+                                                    Width="15" Height="17"
+                                                    CornerRadius="3"
+                                                    Background="#181228"
+                                                    BorderBrush="#6D28D9"
+                                                    BorderThickness="1.1"/>
+
+                                            <!-- Front Document Sheet -->
+                                            <Border Canvas.Left="2" Canvas.Top="4"
+                                                    Width="16" Height="17"
+                                                    CornerRadius="3"
+                                                    Background="#24173E"
+                                                    BorderBrush="#A855F7"
+                                                    BorderThickness="1.2">
+                                                <Border.Effect>
+                                                    <DropShadowEffect Color="#A855F7" BlurRadius="6" ShadowDepth="0" Opacity="0.5"/>
+                                                </Border.Effect>
+                                                <StackPanel Margin="3,3,3,2" VerticalAlignment="Center">
+                                                    <Rectangle Height="1.4" Fill="#C084FC" RadiusX="0.7" RadiusY="0.7" Margin="0,0,2,2"/>
+                                                    <Rectangle Height="1.4" Fill="#A855F7" RadiusX="0.7" RadiusY="0.7" Margin="0,0,5,2"/>
+                                                    <Rectangle Height="1.4" Fill="#7C3AED" RadiusX="0.7" RadiusY="0.7" Margin="0,0,3,0"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Canvas>
+                                    </Grid>
+                                </components:NavigationCard>
+                            </StackPanel>
+                        </ScrollViewer>
                     </StackPanel>
 
                     <!-- View B: Active Apps Manager View -->
