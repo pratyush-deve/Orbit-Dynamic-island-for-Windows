@@ -33,6 +33,7 @@ public partial class ExpandedIsland : UserControl
     public bool IsInManageAppsView { get; private set; }
     public bool IsInAiMonitorView { get; private set; }
 
+    private IAgentStateManager? _agentStateManager;
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
 
@@ -105,6 +106,7 @@ public partial class ExpandedIsland : UserControl
         }
         if (agentStateManager != null)
         {
+            _agentStateManager = agentStateManager;
             AiMonitorPanel.Initialize(agentStateManager);
         }
         if (attentionManager != null)
@@ -466,6 +468,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "AI card clicked. Switching to AI Agent Monitor view.");
 
         IsInAiMonitorView = true;
+        _agentStateManager?.Refresh();
         DesiredHeightChanged?.Invoke(AiMonitorPanel.GetDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
