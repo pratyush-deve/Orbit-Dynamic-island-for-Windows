@@ -84,7 +84,7 @@
                     MouseLeftButtonUp="OnToggleClicked">
                 <Border.Effect>
                     <DropShadowEffect x:Name="ToggleGlow"
-                                      Color="{DynamicResource Color.Accent.PurpleLight}"
+                                      Color="#C084FC"
                                       BlurRadius="6"
                                       ShadowDepth="0"
                                       Opacity="0.0"/>

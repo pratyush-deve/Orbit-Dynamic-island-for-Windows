@@ -20,14 +20,27 @@ public partial class DevAppCard : UserControl
     public static readonly DependencyProperty AppProperty =
         DependencyProperty.Register(
             nameof(App),
-            typeof(DevApp),
+            typeof(OrbitApp),
             typeof(DevAppCard),
             new PropertyMetadata(null, OnAppChanged));
 
-    public DevApp? App
+    public OrbitApp? App
     {
-        get => (DevApp?)GetValue(AppProperty);
+        get => (OrbitApp?)GetValue(AppProperty);
         set => SetValue(AppProperty, value);
+    }
+
+    public static readonly RoutedEvent ClickEvent =
+        EventManager.RegisterRoutedEvent(
+            nameof(Click),
+            RoutingStrategy.Bubble,
+            typeof(RoutedEventHandler),
+            typeof(DevAppCard));
+
+    public event RoutedEventHandler Click
+    {
+        add => AddHandler(ClickEvent, value);
+        remove => RemoveHandler(ClickEvent, value);
     }
 
     private readonly WpfBrush _defaultBackground;
@@ -152,10 +165,27 @@ public partial class DevAppCard : UserControl
     {
         if (App == null) return;
 
-        // Individual card click activates or launches that specific application
+        // Raise click event for parent container handling (e.g. window activation in hubs)
+        var args = new RoutedEventArgs(ClickEvent, this);
+        RaiseEvent(args);
+        if (args.Handled) return;
+
+        // Default direct launch fallback
         try
         {
             OrbitLogger.Info(LogCategory, $"Card clicked: Launching single app '{App.Name}'...");
+
+            if (!string.IsNullOrWhiteSpace(App.ExecutablePath) &&
+                App.ExecutablePath.StartsWith("shell:AppsFolder\\", StringComparison.OrdinalIgnoreCase))
+            {
+                var psiShell = new ProcessStartInfo("explorer.exe", App.ExecutablePath)
+                {
+                    UseShellExecute = true
+                };
+                Process.Start(psiShell);
+                return;
+            }
+
             var psi = new ProcessStartInfo
             {
                 FileName = App.ExecutablePath,

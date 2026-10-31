@@ -8,6 +8,7 @@ using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
+using Orbit.Services.Hubs;
 using Orbit.Services.SystemControls;
 
 namespace Orbit;
@@ -39,9 +40,10 @@ public partial class MainWindow : Window
     private readonly IDevWorkspaceService? _devWorkspaceService;
     private readonly IAgentStateManager? _agentStateManager;
     private readonly IOrbitAttentionManager? _attentionManager;
+    private readonly ISocialHubService? _socialHubService;
+    private readonly IWorkHubService? _workHubService;
 
     private IntPtr _hwnd = IntPtr.Zero;
-    private bool _pendingOpenAiMonitor;
 
     public MainWindow(
         IMonitorService monitorService,
@@ -54,7 +56,9 @@ public partial class MainWindow : Window
         ISystemControlsService? systemControlsService = null,
         IDevWorkspaceService? devWorkspaceService = null,
         IAgentStateManager? agentStateManager = null,
-        IOrbitAttentionManager? attentionManager = null)
+        IOrbitAttentionManager? attentionManager = null,
+        ISocialHubService? socialHubService = null,
+        IWorkHubService? workHubService = null)
     {
         InitializeComponent();
 
@@ -69,6 +73,8 @@ public partial class MainWindow : Window
         _devWorkspaceService = devWorkspaceService;
         _agentStateManager = agentStateManager;
         _attentionManager = attentionManager;
+        _socialHubService = socialHubService;
+        _workHubService = workHubService;
 
         // Wire lifecycle service events
         _lifecycleService.StateChanged += OnStateChanged;
@@ -98,8 +104,8 @@ public partial class MainWindow : Window
         PillMascot.SetGlowEnabled(glow);
         IslandPanel.SetGlowStatus(glow);
 
-        // Initialize active apps manager, system controls, dev workspace, AI agent monitor, and responsive height changes
-        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager);
+        // Initialize active apps manager, system controls, dev workspace, AI agent monitor, social/work hubs, and responsive height changes
+        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
 
         if (_attentionManager != null)
@@ -118,6 +124,16 @@ public partial class MainWindow : Window
         if (_devWorkspaceService != null)
         {
             _ = _devWorkspaceService.InitializeAsync();
+        }
+
+        if (_socialHubService != null)
+        {
+            _ = _socialHubService.InitializeAsync();
+        }
+
+        if (_workHubService != null)
+        {
+            _ = _workHubService.InitializeAsync();
         }
 
         OrbitLogger.Info(LogCategory, $"MainWindow loaded at top-centre [{Left:0.#}, {Top:0.#}]. State: {_lifecycleService.CurrentState}");
@@ -224,7 +240,6 @@ public partial class MainWindow : Window
         if (e.ChangedButton == MouseButton.Left)
         {
             OrbitLogger.Info(LogCategory, "Collapsed pill clicked. Initiating expansion.");
-            _pendingOpenAiMonitor = _attentionManager != null && _attentionManager.CurrentMascotState != Orbit.Models.AgentState.Idle;
             _lifecycleService.RequestExpand();
         }
     }
@@ -291,11 +306,6 @@ public partial class MainWindow : Window
                 _lifecycleService.SetState(CompanionState.Expanded);
                 Activate();
                 _overlayService.ReapplyTopmost(_hwnd);
-                if (_pendingOpenAiMonitor)
-                {
-                    _pendingOpenAiMonitor = false;
-                    IslandPanel.NavigateToAiMonitor();
-                }
                 OrbitLogger.Info(LogCategory, "Two-stage expansion completed.");
             };
 

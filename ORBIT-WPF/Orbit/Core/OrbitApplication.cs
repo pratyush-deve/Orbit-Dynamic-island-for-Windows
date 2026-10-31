@@ -4,6 +4,7 @@ using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
+using Orbit.Services.Hubs;
 using Orbit.Services.SystemControls;
 
 namespace Orbit.Core;
@@ -50,12 +51,17 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<IWindowManager, WindowManager>();
         services.AddSingleton<ISystemControlsService, SystemControlsService>();
 
-        // 5. Developer Workspace
+        // 5. Developer Workspace & Application Discovery
         services.AddSingleton<IIconExtractorService, IconExtractorService>();
         services.AddSingleton<IAppDiscoveryService, AppDiscoveryService>();
         services.AddSingleton<IDevWorkspaceService, DevWorkspaceService>();
 
-        // 6. AI Agent Hub / Antigravity Observer
+        // 6. Application Hubs (Social Hub & Work Hub)
+        services.AddSingleton<INotificationService, NotificationService>();
+        services.AddSingleton<ISocialHubService, SocialHubService>();
+        services.AddSingleton<IWorkHubService, WorkHubService>();
+
+        // 7. AI Agent Hub / Antigravity Observer
         services.AddSingleton<IAntigravityProcessMonitor, AntigravityProcessMonitor>();
         services.AddSingleton<IAntigravityDatabaseObserver, AntigravityDatabaseObserver>();
         services.AddSingleton<IAntigravityTranscriptWatcher, AntigravityTranscriptWatcher>();
@@ -63,7 +69,7 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<IAgentStateManager, AgentStateManager>();
         services.AddSingleton<IOrbitAttentionManager, OrbitAttentionManager>();
 
-        // 7. Windows
+        // 8. Windows
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -87,6 +93,8 @@ public sealed class OrbitApplication : IDisposable
             _serviceProvider.GetService<IWindowManager>()?.Dispose();
             _serviceProvider.GetService<ISystemControlsService>()?.Dispose();
             _serviceProvider.GetService<IDevWorkspaceService>()?.Dispose();
+            _serviceProvider.GetService<ISocialHubService>()?.Dispose();
+            _serviceProvider.GetService<IWorkHubService>()?.Dispose();
             _serviceProvider.GetService<IAgentStateManager>()?.Dispose();
             _serviceProvider.GetService<IAntigravityDatabaseObserver>()?.Dispose();
             _serviceProvider.GetService<IAntigravityProcessMonitor>()?.Dispose();

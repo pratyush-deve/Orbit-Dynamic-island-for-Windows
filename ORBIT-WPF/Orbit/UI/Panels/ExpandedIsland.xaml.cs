@@ -8,6 +8,7 @@ using Orbit.Integrations.Desktop;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
+using Orbit.Services.Hubs;
 using Orbit.Services.SystemControls;
 using Orbit.UI.Mascot;
 
@@ -32,8 +33,14 @@ public partial class ExpandedIsland : UserControl
     public bool IsInDevModeView { get; private set; }
     public bool IsInManageAppsView { get; private set; }
     public bool IsInAiMonitorView { get; private set; }
+    public bool IsInSocialHubView { get; private set; }
+    public bool IsInManageSocialAppsView { get; private set; }
+    public bool IsInWorkHubView { get; private set; }
+    public bool IsInManageWorkAppsView { get; private set; }
 
     private IAgentStateManager? _agentStateManager;
+    private ISocialHubService? _socialHubService;
+    private IWorkHubService? _workHubService;
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
 
@@ -72,6 +79,38 @@ public partial class ExpandedIsland : UserControl
             }
         };
 
+        SocialHubPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInSocialHubView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
+        WorkHubPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInWorkHubView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
+        ManageSocialAppsPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInManageSocialAppsView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
+        ManageWorkAppsPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInManageWorkAppsView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
         ActiveAppsPanel.DismissAndCollapseRequested += OnActiveAppsDismissAndCollapseRequested;
 
         CardActiveApps.Click += OnCardActiveAppsClicked;
@@ -85,6 +124,12 @@ public partial class ExpandedIsland : UserControl
 
         CardAiAgent.Click += OnCardAiAgentClicked;
         CardAiAgent.MouseLeftButtonUp += (s, e) => OnCardAiAgentClicked(s, e);
+
+        CardSocial.Click += OnCardSocialClicked;
+        CardSocial.MouseLeftButtonUp += (s, e) => OnCardSocialClicked(s, e);
+
+        CardWork.Click += OnCardWorkClicked;
+        CardWork.MouseLeftButtonUp += (s, e) => OnCardWorkClicked(s, e);
     }
 
     public void Initialize(
@@ -92,7 +137,9 @@ public partial class ExpandedIsland : UserControl
         ISystemControlsService? controlsService = null,
         IDevWorkspaceService? workspaceService = null,
         IAgentStateManager? agentStateManager = null,
-        IOrbitAttentionManager? attentionManager = null)
+        IOrbitAttentionManager? attentionManager = null,
+        ISocialHubService? socialHubService = null,
+        IWorkHubService? workHubService = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
         if (controlsService != null)
@@ -108,6 +155,18 @@ public partial class ExpandedIsland : UserControl
         {
             _agentStateManager = agentStateManager;
             AiMonitorPanel.Initialize(agentStateManager);
+        }
+        if (socialHubService != null)
+        {
+            _socialHubService = socialHubService;
+            SocialHubPanel.Initialize(socialHubService);
+            ManageSocialAppsPanel.Initialize(socialHubService, "MANAGE SOCIAL APPS", "SOCIAL");
+        }
+        if (workHubService != null)
+        {
+            _workHubService = workHubService;
+            WorkHubPanel.Initialize(workHubService);
+            ManageWorkAppsPanel.Initialize(workHubService, "MANAGE WORK APPS", "WORK");
         }
         if (attentionManager != null)
         {
@@ -145,6 +204,10 @@ public partial class ExpandedIsland : UserControl
         IsInDevModeView = false;
         IsInManageAppsView = false;
         IsInAiMonitorView = false;
+        IsInSocialHubView = false;
+        IsInManageSocialAppsView = false;
+        IsInWorkHubView = false;
+        IsInManageWorkAppsView = false;
 
         ActiveAppsContainer.BeginAnimation(OpacityProperty, null);
         ActiveAppsContainer.Visibility = Visibility.Collapsed;
@@ -165,6 +228,22 @@ public partial class ExpandedIsland : UserControl
         AiMonitorContainer.BeginAnimation(OpacityProperty, null);
         AiMonitorContainer.Visibility = Visibility.Collapsed;
         AiMonitorContainer.Opacity = 0.0;
+
+        SocialHubContainer.BeginAnimation(OpacityProperty, null);
+        SocialHubContainer.Visibility = Visibility.Collapsed;
+        SocialHubContainer.Opacity = 0.0;
+
+        ManageSocialAppsContainer.BeginAnimation(OpacityProperty, null);
+        ManageSocialAppsContainer.Visibility = Visibility.Collapsed;
+        ManageSocialAppsContainer.Opacity = 0.0;
+
+        WorkHubContainer.BeginAnimation(OpacityProperty, null);
+        WorkHubContainer.Visibility = Visibility.Collapsed;
+        WorkHubContainer.Opacity = 0.0;
+
+        ManageWorkAppsContainer.BeginAnimation(OpacityProperty, null);
+        ManageWorkAppsContainer.Visibility = Visibility.Collapsed;
+        ManageWorkAppsContainer.Opacity = 0.0;
 
         HomeContentView.BeginAnimation(OpacityProperty, null);
         HomeContentView.Visibility = Visibility.Visible;
@@ -460,12 +539,15 @@ public partial class ExpandedIsland : UserControl
     {
         if (IsInAiMonitorView) return;
         ResetToHomeView();
-        OnCardAiAgentClicked(this, new RoutedEventArgs());
+        OnCardAiAgentClicked(this, new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
     }
 
     private void OnCardAiAgentClicked(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
+        if (e?.RoutedEvent != null)
+        {
+            e.Handled = true;
+        }
         if (IsInAiMonitorView || IsInDevModeView || IsInControlsView || IsInActiveAppsView) return;
         OrbitLogger.Info(LogCategory, "AI card clicked. Switching to AI Agent Monitor view.");
 
@@ -579,14 +661,284 @@ public partial class ExpandedIsland : UserControl
 
     private void OnCardSocialClicked(object sender, RoutedEventArgs e)
     {
-        e.Handled = true;
-        OrbitLogger.Info(LogCategory, "SOCIAL card clicked (UI placeholder).");
+        if (e?.RoutedEvent != null)
+        {
+            e.Handled = true;
+        }
+        if (IsInSocialHubView) return;
+        OrbitLogger.Info(LogCategory, "SOCIAL card clicked. Switching to Social Hub view.");
+
+        IsInSocialHubView = true;
+        SocialHubPanel.UpdateAppsDisplay();
+        DesiredHeightChanged?.Invoke(SocialHubPanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            SocialHubContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                SocialHubContainer.BeginAnimation(OpacityProperty, null);
+                SocialHubContainer.Opacity = 1.0;
+            };
+            SocialHubContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
     }
 
-    private void OnCardDocsClicked(object sender, RoutedEventArgs e)
+    private void OnSocialHubBackRequested()
     {
-        e.Handled = true;
-        OrbitLogger.Info(LogCategory, "DOCS card clicked (UI placeholder).");
+        OrbitLogger.Info(LogCategory, "Back clicked in Social Hub view. Returning to Home.");
+
+        IsInSocialHubView = false;
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            SocialHubContainer.BeginAnimation(OpacityProperty, null);
+            SocialHubContainer.Visibility = Visibility.Collapsed;
+            SocialHubContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        SocialHubContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnSocialHubManageAppsRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Manage Apps clicked in Social Hub. Switching to Manage Social Apps view.");
+
+        IsInSocialHubView = false;
+        IsInManageSocialAppsView = true;
+        ManageSocialAppsPanel.UpdateAppsList();
+        DesiredHeightChanged?.Invoke(ManageSocialAppsPanel.GetDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            SocialHubContainer.BeginAnimation(OpacityProperty, null);
+            SocialHubContainer.Visibility = Visibility.Collapsed;
+            SocialHubContainer.Opacity = 0.0;
+
+            ManageSocialAppsContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                ManageSocialAppsContainer.BeginAnimation(OpacityProperty, null);
+                ManageSocialAppsContainer.Opacity = 1.0;
+            };
+            ManageSocialAppsContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        SocialHubContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnManageSocialAppsBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Manage Social Apps. Returning to Social Hub view.");
+
+        IsInManageSocialAppsView = false;
+        IsInSocialHubView = true;
+        SocialHubPanel.UpdateAppsDisplay();
+        DesiredHeightChanged?.Invoke(SocialHubPanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            ManageSocialAppsContainer.BeginAnimation(OpacityProperty, null);
+            ManageSocialAppsContainer.Visibility = Visibility.Collapsed;
+            ManageSocialAppsContainer.Opacity = 0.0;
+
+            SocialHubContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                SocialHubContainer.BeginAnimation(OpacityProperty, null);
+                SocialHubContainer.Opacity = 1.0;
+            };
+            SocialHubContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        ManageSocialAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnCardWorkClicked(object sender, RoutedEventArgs e)
+    {
+        if (e?.RoutedEvent != null)
+        {
+            e.Handled = true;
+        }
+        if (IsInWorkHubView) return;
+        OrbitLogger.Info(LogCategory, "WORK card clicked. Switching to Work Hub view.");
+
+        IsInWorkHubView = true;
+        WorkHubPanel.UpdateAppsDisplay();
+        DesiredHeightChanged?.Invoke(WorkHubPanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            WorkHubContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                WorkHubContainer.BeginAnimation(OpacityProperty, null);
+                WorkHubContainer.Opacity = 1.0;
+            };
+            WorkHubContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnWorkHubBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Work Hub view. Returning to Home.");
+
+        IsInWorkHubView = false;
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            WorkHubContainer.BeginAnimation(OpacityProperty, null);
+            WorkHubContainer.Visibility = Visibility.Collapsed;
+            WorkHubContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        WorkHubContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnWorkHubManageAppsRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Manage Apps clicked in Work Hub. Switching to Manage Work Apps view.");
+
+        IsInWorkHubView = false;
+        IsInManageWorkAppsView = true;
+        ManageWorkAppsPanel.UpdateAppsList();
+        DesiredHeightChanged?.Invoke(ManageWorkAppsPanel.GetDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            WorkHubContainer.BeginAnimation(OpacityProperty, null);
+            WorkHubContainer.Visibility = Visibility.Collapsed;
+            WorkHubContainer.Opacity = 0.0;
+
+            ManageWorkAppsContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                ManageWorkAppsContainer.BeginAnimation(OpacityProperty, null);
+                ManageWorkAppsContainer.Opacity = 1.0;
+            };
+            ManageWorkAppsContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        WorkHubContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnManageWorkAppsBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Manage Work Apps. Returning to Work Hub view.");
+
+        IsInManageWorkAppsView = false;
+        IsInWorkHubView = true;
+        WorkHubPanel.UpdateAppsDisplay();
+        DesiredHeightChanged?.Invoke(WorkHubPanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            ManageWorkAppsContainer.BeginAnimation(OpacityProperty, null);
+            ManageWorkAppsContainer.Visibility = Visibility.Collapsed;
+            ManageWorkAppsContainer.Opacity = 0.0;
+
+            WorkHubContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                WorkHubContainer.BeginAnimation(OpacityProperty, null);
+                WorkHubContainer.Opacity = 1.0;
+            };
+            WorkHubContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        ManageWorkAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     private void OnMascotClicked(object sender, MouseButtonEventArgs e)

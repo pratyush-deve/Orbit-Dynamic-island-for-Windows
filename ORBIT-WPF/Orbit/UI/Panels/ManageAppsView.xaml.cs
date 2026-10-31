@@ -106,7 +106,7 @@ public partial class ManageAppsView : UserControl, IDisposable
         TxtSearch.Focus();
     }
 
-    private void OnRowToggled(DevApp app, bool isSelected)
+    private void OnRowToggled(OrbitApp app, bool isSelected)
     {
         if (_workspaceService == null) return;
         OrbitLogger.Info(LogCategory, $"Row toggle for app '{app.Name}': {isSelected}");

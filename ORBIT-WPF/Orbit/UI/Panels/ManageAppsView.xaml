@@ -68,7 +68,7 @@
                                 <Setter TargetName="ArrowGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
                                 <Setter TargetName="BackBorder" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                        <DropShadowEffect Color="#C084FC"
                                                           BlurRadius="8"
                                                           ShadowDepth="0"
                                                           Opacity="0.6"/>

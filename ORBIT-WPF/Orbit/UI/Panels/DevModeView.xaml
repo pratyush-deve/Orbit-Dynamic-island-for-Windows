@@ -68,7 +68,7 @@
                                 <Setter TargetName="ArrowGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
                                 <Setter TargetName="BackBorder" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                        <DropShadowEffect Color="#C084FC"
                                                           BlurRadius="8"
                                                           ShadowDepth="0"
                                                           Opacity="0.6"/>
@@ -148,7 +148,7 @@
                                 <Setter TargetName="GearGlyph" Property="Fill" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
                                 <Setter TargetName="SettingsBorder" Property="Effect">
                                     <Setter.Value>
-                                        <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                        <DropShadowEffect Color="#C084FC"
                                                           BlurRadius="8"
                                                           ShadowDepth="0"
                                                           Opacity="0.6"/>
@@ -253,7 +253,7 @@
 
                         <Border.Effect>
                             <DropShadowEffect x:Name="BtnGlow"
-                                              Color="{DynamicResource Color.Accent.PurpleLight}"
+                                              Color="#C084FC"
                                               BlurRadius="12"
                                               ShadowDepth="0"
                                               Opacity="0.5"/>
@@ -295,7 +295,7 @@
                             <Setter TargetName="ActivateBorder" Property="BorderBrush" Value="#E9D5FF"/>
                             <Setter TargetName="ActivateBorder" Property="Effect">
                                 <Setter.Value>
-                                    <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                    <DropShadowEffect Color="#C084FC"
                                                       BlurRadius="16"
                                                       ShadowDepth="0"
                                                       Opacity="0.85"/>

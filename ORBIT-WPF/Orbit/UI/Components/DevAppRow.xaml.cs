@@ -15,17 +15,17 @@ public partial class DevAppRow : UserControl
     public static readonly DependencyProperty AppProperty =
         DependencyProperty.Register(
             nameof(App),
-            typeof(DevApp),
+            typeof(OrbitApp),
             typeof(DevAppRow),
             new PropertyMetadata(null, OnAppChanged));
 
-    public DevApp? App
+    public OrbitApp? App
     {
-        get => (DevApp?)GetValue(AppProperty);
+        get => (OrbitApp?)GetValue(AppProperty);
         set => SetValue(AppProperty, value);
     }
 
-    public event Action<DevApp, bool>? Toggled;
+    public event Action<OrbitApp, bool>? Toggled;
 
     private readonly WpfBrush _rowResting = new SolidColorBrush(WpfColor.FromRgb(0x18, 0x11, 0x28));
     private readonly WpfBrush _rowHover = new SolidColorBrush(WpfColor.FromRgb(0x24, 0x17, 0x3D));
@@ -46,12 +46,12 @@ public partial class DevAppRow : UserControl
     {
         if (d is DevAppRow row)
         {
-            if (e.OldValue is DevApp oldApp)
+            if (e.OldValue is OrbitApp oldApp)
             {
                 oldApp.PropertyChanged -= row.OnAppPropertyChanged;
             }
 
-            if (e.NewValue is DevApp newApp)
+            if (e.NewValue is OrbitApp newApp)
             {
                 newApp.PropertyChanged += row.OnAppPropertyChanged;
                 row.UpdateRow();

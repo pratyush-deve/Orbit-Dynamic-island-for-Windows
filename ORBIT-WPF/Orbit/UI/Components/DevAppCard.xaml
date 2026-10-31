@@ -48,7 +48,7 @@
 
         <Border.Effect>
             <DropShadowEffect x:Name="CardGlow"
-                              Color="{DynamicResource Color.Accent.PurpleLight}"
+                              Color="#C084FC"
                               BlurRadius="10"
                               ShadowDepth="0"
                               Opacity="0.2"/>
