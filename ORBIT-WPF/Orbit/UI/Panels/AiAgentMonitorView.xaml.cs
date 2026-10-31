@@ -7,14 +7,15 @@ using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
 using Image = System.Windows.Controls.Image;
+using Size = System.Windows.Size;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
 namespace Orbit.UI.Panels;
 
 /// <summary>
 /// Interaction logic for AiAgentMonitorView.xaml.
-/// Lightweight, compact AI Activity Monitor displaying only currently running Antigravity applications
-/// with clean WORKING / IDLE / DONE states and instant "See Output" window activation.
+/// Content-driven, responsive AI Activity Monitor displaying currently running Antigravity applications
+/// with clean WORKING / IDLE / DONE states, dynamic height calculation, and instant window activation.
 /// </summary>
 public partial class AiAgentMonitorView : UserControl, IDisposable
 {
@@ -25,6 +26,12 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
 
     private IAgentStateManager? _stateManager;
     private bool _disposed;
+
+    // Window layout constants
+    // ExpandedIsland non-body overhead: Window margin (16) + Grid margin (24) + Mascot row (~56) + padding (~8) = 104 DIPs
+    private const double WindowFramingOverhead = 104.0;
+    private const double MinWindowHeightEmpty = 205.0;
+    private const double DefaultWindowHeightCards = 255.0;
 
     // State styling brushes
     private readonly SolidColorBrush _brushWorkingBg = new((Color)ColorConverter.ConvertFromString("#2E1848"));
@@ -46,6 +53,7 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
     public AiAgentMonitorView()
     {
         InitializeComponent();
+        Loaded += (s, e) => DesiredHeightChanged?.Invoke(GetDesiredHeight());
     }
 
     public void Initialize(IAgentStateManager stateManager)
@@ -56,19 +64,38 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         UpdateUI(_stateManager.AntigravitySession, _stateManager.AntigravityIdeSession);
     }
 
+    /// <summary>
+    /// Calculates the exact content-driven target height for the parent companion window.
+    /// Accounts for the Mascot, window frame margins, headers, cards, and buttons without clipping.
+    /// </summary>
     public double GetDesiredHeight()
     {
-        if (_stateManager == null) return 175.0;
+        if (_stateManager == null) return DefaultWindowHeightCards;
 
         bool agRunning = _stateManager.AntigravitySession.IsProcessRunning;
         bool ideRunning = _stateManager.AntigravityIdeSession.IsProcessRunning;
 
+        // When neither application is running, contract downward to the compact empty state
         if (!agRunning && !ideRunning)
         {
-            return 140.0;
+            return MinWindowHeightEmpty;
         }
 
-        return 175.0;
+        // Measure actual content height dynamically with available width constraints
+        try
+        {
+            Measure(new Size(400, double.PositiveInfinity));
+            double measuredContentHeight = DesiredSize.Height;
+            if (measuredContentHeight > 40)
+            {
+                double calculatedTotal = Math.Ceiling(measuredContentHeight + WindowFramingOverhead);
+                // Return calculated height clamped to a comfortable, non-clipped minimum
+                return Math.Max(DefaultWindowHeightCards, calculatedTotal);
+            }
+        }
+        catch { }
+
+        return DefaultWindowHeightCards;
     }
 
     private void OnStateUpdated(AgentSessionInfo ag, AgentSessionInfo ide)
@@ -102,7 +129,7 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         // 2. Adjust Grid layout according to active apps
         if (agRunning && ideRunning)
         {
-            // Both running -> 2 columns
+            // Both running -> 2 equal-width columns side by side
             ColCard1.Width = new GridLength(1, GridUnitType.Star);
             ColSpacer.Width = new GridLength(10);
             ColCard2.Width = new GridLength(1, GridUnitType.Star);
@@ -125,7 +152,7 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         }
         else if (agRunning)
         {
-            // Only Antigravity running -> full width
+            // Only Antigravity running -> naturally occupies full width, no space reserved for IDE
             ColCard1.Width = new GridLength(1, GridUnitType.Star);
             ColSpacer.Width = new GridLength(0);
             ColCard2.Width = new GridLength(0);
@@ -143,10 +170,10 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         }
         else
         {
-            // Only Antigravity IDE running -> full width
-            ColCard1.Width = new GridLength(0);
+            // Only Antigravity IDE running -> naturally occupies full width, no space reserved for Antigravity
+            ColCard1.Width = new GridLength(1, GridUnitType.Star);
             ColSpacer.Width = new GridLength(0);
-            ColCard2.Width = new GridLength(1, GridUnitType.Star);
+            ColCard2.Width = new GridLength(0);
 
             Grid.SetColumn(CardAntigravityIde, 0);
             Grid.SetColumnSpan(CardAntigravityIde, 3);

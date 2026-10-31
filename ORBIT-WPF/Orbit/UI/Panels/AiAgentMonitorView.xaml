@@ -4,7 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              mc:Ignorable="d" 
-             d:DesignHeight="180" d:DesignWidth="440"
+             d:DesignWidth="400"
              HorizontalAlignment="Stretch"
              VerticalAlignment="Stretch">
 
@@ -17,7 +17,6 @@
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="10,5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -26,10 +25,10 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
-                                Padding="{TemplateBinding Padding}">
+                                CornerRadius="7"
+                                Padding="8,2">
                             <Border.Effect>
-                                <DropShadowEffect Color="#8A2BE2" BlurRadius="6" ShadowDepth="0" Opacity="0.5"/>
+                                <DropShadowEffect Color="#8A2BE2" BlurRadius="5" ShadowDepth="0" Opacity="0.4"/>
                             </Border.Effect>
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -61,8 +60,8 @@
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
-                                Padding="10,4">
+                                CornerRadius="10"
+                                Padding="8,3">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -78,45 +77,45 @@
         </Style>
     </UserControl.Resources>
 
-    <Grid Margin="16,10,16,14">
+    <Grid Margin="2,2,2,4">
         <Grid.RowDefinitions>
             <!-- Row 0: Top Header -->
             <RowDefinition Height="Auto"/>
             <!-- Row 1: Content Area -->
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Top Header Navigation -->
-        <Grid Grid.Row="0" Margin="0,0,0,10">
+        <Grid Grid.Row="0" Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Style="{StaticResource AiBackBtnStyle}"
                         Click="OnBackClicked"
                         ToolTip="Return to Dashboard">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="←" FontWeight="Bold" Margin="0,0,5,0" Foreground="#C084FC"/>
-                        <TextBlock Text="Back" FontSize="11" FontWeight="SemiBold"/>
+                        <TextBlock Text="←" FontWeight="Bold" Margin="0,0,4,0" Foreground="#C084FC"/>
+                        <TextBlock Text="Back" FontSize="10.5" FontWeight="SemiBold"/>
                     </StackPanel>
                 </Button>
                 <TextBlock Text="AI Activity Monitor"
-                           FontSize="13"
+                           FontSize="12.5"
                            FontWeight="Bold"
                            Foreground="#FFFFFF"
                            VerticalAlignment="Center"
-                           Margin="12,0,0,0"/>
+                           Margin="10,0,0,0"/>
             </StackPanel>
 
             <!-- Active / Running summary indicator -->
             <Border x:Name="BadgeSummaryStatus"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center"
-                    CornerRadius="10"
-                    Padding="8,3"
+                    CornerRadius="9"
+                    Padding="7,2"
                     Background="#1E1430"
                     BorderBrush="#3D295F"
                     BorderThickness="1">
                 <TextBlock x:Name="TxtSummaryStatus"
                            Text="MONITORING"
-                           FontSize="10"
+                           FontSize="9"
                            FontWeight="Bold"
                            Foreground="#A855F7"/>
             </Border>
@@ -131,25 +130,25 @@
                     BorderBrush="#2A1B3D"
                     BorderThickness="1"
                     CornerRadius="12"
-                    Padding="16"
+                    Padding="14,12"
                     HorizontalAlignment="Stretch"
                     VerticalAlignment="Center">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="✦"
-                               FontSize="18"
+                               FontSize="16"
                                Foreground="#8B7A9F"
                                HorizontalAlignment="Center"
-                               Margin="0,0,0,4"/>
+                               Margin="0,0,0,3"/>
                     <TextBlock Text="No Antigravity applications running."
-                               FontSize="12"
+                               FontSize="11.5"
                                FontWeight="SemiBold"
                                Foreground="#D8B4FE"
                                HorizontalAlignment="Center"/>
                     <TextBlock Text="Launch Antigravity or Antigravity IDE to monitor agent activities."
-                               FontSize="10"
+                               FontSize="9.5"
                                Foreground="#7C6D91"
                                HorizontalAlignment="Center"
-                               Margin="0,3,0,0"/>
+                               Margin="0,2,0,0"/>
                 </StackPanel>
             </Border>
 
@@ -168,56 +167,57 @@
                         BorderBrush="#3D295F"
                         BorderThickness="1"
                         CornerRadius="12"
-                        Padding="12,10"
+                        Padding="12,9"
                         Visibility="Visible">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- Header: Icon, Name, State Badge -->
                         <Grid Grid.Row="0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Image x:Name="ImgAgIcon" Width="20" Height="20" VerticalAlignment="Center"/>
+                                <Image x:Name="ImgAgIcon" Width="18" Height="18" VerticalAlignment="Center"/>
                                 <TextBlock Text="Antigravity"
-                                           FontSize="12"
+                                           FontSize="11.5"
                                            FontWeight="Bold"
                                            Foreground="#FFFFFF"
                                            VerticalAlignment="Center"
-                                           Margin="8,0,0,0"/>
+                                           Margin="7,0,0,0"/>
                             </StackPanel>
 
                             <!-- State Badge -->
                             <Border x:Name="BadgeAgState"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    CornerRadius="8"
+                                    CornerRadius="7"
                                     Padding="6,2"
                                     Background="#201633">
                                 <TextBlock x:Name="TxtAgState"
                                            Text="IDLE"
-                                           FontSize="9"
+                                           FontSize="8.5"
                                            FontWeight="Bold"
                                            Foreground="#8B7A9F"/>
                             </Border>
                         </Grid>
 
                         <!-- Middle: Task Title -->
-                        <StackPanel Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+                        <Grid Grid.Row="1" MinHeight="32" Margin="0,6,0,8" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtAgTaskTitle"
                                        Text="Standing by"
-                                       FontSize="11"
+                                       FontSize="10.5"
                                        Foreground="#E2E8F0"
                                        FontWeight="Medium"
                                        TextWrapping="Wrap"
-                                       MaxHeight="34"
+                                       MaxHeight="32"
                                        TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        </Grid>
 
                         <!-- Bottom: See Output Action Button -->
                         <Button Grid.Row="2"
+                                Height="26"
                                 Style="{StaticResource SeeOutputButtonStyle}"
                                 Content="See Output"
                                 HorizontalAlignment="Stretch"
@@ -232,56 +232,57 @@
                         BorderBrush="#3D295F"
                         BorderThickness="1"
                         CornerRadius="12"
-                        Padding="12,10"
+                        Padding="12,9"
                         Visibility="Visible">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
                         <!-- Header: Icon, Name, State Badge -->
                         <Grid Grid.Row="0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Image x:Name="ImgIdeIcon" Width="20" Height="20" VerticalAlignment="Center"/>
+                                <Image x:Name="ImgIdeIcon" Width="18" Height="18" VerticalAlignment="Center"/>
                                 <TextBlock Text="Antigravity IDE"
-                                           FontSize="12"
+                                           FontSize="11.5"
                                            FontWeight="Bold"
                                            Foreground="#FFFFFF"
                                            VerticalAlignment="Center"
-                                           Margin="8,0,0,0"/>
+                                           Margin="7,0,0,0"/>
                             </StackPanel>
 
                             <!-- State Badge -->
                             <Border x:Name="BadgeIdeState"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    CornerRadius="8"
+                                    CornerRadius="7"
                                     Padding="6,2"
                                     Background="#201633">
                                 <TextBlock x:Name="TxtIdeState"
                                            Text="IDLE"
-                                           FontSize="9"
+                                           FontSize="8.5"
                                            FontWeight="Bold"
                                            Foreground="#8B7A9F"/>
                             </Border>
                         </Grid>
 
                         <!-- Middle: Task Title -->
-                        <StackPanel Grid.Row="1" Margin="0,8,0,8" VerticalAlignment="Center">
+                        <Grid Grid.Row="1" MinHeight="32" Margin="0,6,0,8" VerticalAlignment="Center">
                             <TextBlock x:Name="TxtIdeTaskTitle"
                                        Text="Standing by"
-                                       FontSize="11"
+                                       FontSize="10.5"
                                        Foreground="#E2E8F0"
                                        FontWeight="Medium"
                                        TextWrapping="Wrap"
-                                       MaxHeight="34"
+                                       MaxHeight="32"
                                        TextTrimming="CharacterEllipsis"/>
-                        </StackPanel>
+                        </Grid>
 
                         <!-- Bottom: See Output Action Button -->
                         <Button Grid.Row="2"
+                                Height="26"
                                 Style="{StaticResource SeeOutputButtonStyle}"
                                 Content="See Output"
                                 HorizontalAlignment="Stretch"
