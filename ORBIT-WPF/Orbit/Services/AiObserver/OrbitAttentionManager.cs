@@ -133,3 +133,4 @@ public sealed class OrbitAttentionManager : IOrbitAttentionManager
         _stateManager.StateUpdated -= OnAgentStateUpdated;
     }
 }
+

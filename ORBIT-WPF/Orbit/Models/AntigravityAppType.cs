@@ -6,3 +6,4 @@ public enum AntigravityAppType
     AntigravityIde,
     Unknown
 }
+

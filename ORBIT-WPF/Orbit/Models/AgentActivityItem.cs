@@ -9,3 +9,4 @@ public class AgentActivityItem
     public string? Command { get; set; }
     public bool IsError { get; set; }
 }
+

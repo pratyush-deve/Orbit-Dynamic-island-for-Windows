@@ -452,6 +452,13 @@ public partial class ExpandedIsland : UserControl
         ManageAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
+    public void NavigateToAiMonitor()
+    {
+        if (IsInAiMonitorView) return;
+        ResetToHomeView();
+        OnCardAiAgentClicked(this, new RoutedEventArgs());
+    }
+
     private void OnCardAiAgentClicked(object sender, RoutedEventArgs e)
     {
         e.Handled = true;

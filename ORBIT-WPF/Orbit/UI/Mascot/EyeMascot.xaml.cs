@@ -287,15 +287,51 @@ public partial class EyeMascot : UserControl
 
         var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
 
+        // Handle Attention Badge (!)
+        if (state == Orbit.Models.AgentState.Attention)
+        {
+            AttentionBadge.Visibility = Visibility.Visible;
+            var badgeFade = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200));
+            AttentionBadge.BeginAnimation(OpacityProperty, badgeFade);
+
+            var pulseAnim = new DoubleAnimation
+            {
+                From = 1.0,
+                To = 1.25,
+                Duration = TimeSpan.FromMilliseconds(700),
+                AutoReverse = true,
+                RepeatBehavior = RepeatBehavior.Forever,
+                EasingFunction = colorEase
+            };
+            AttentionBadgeScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, pulseAnim);
+            AttentionBadgeScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, pulseAnim);
+        }
+        else
+        {
+            if (AttentionBadge.Visibility == Visibility.Visible)
+            {
+                var badgeFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(200));
+                badgeFadeOut.Completed += (s, e) =>
+                {
+                    AttentionBadge.Visibility = Visibility.Collapsed;
+                    AttentionBadgeScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, null);
+                    AttentionBadgeScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, null);
+                };
+                AttentionBadge.BeginAnimation(OpacityProperty, badgeFadeOut);
+            }
+        }
+
+        // Mascot Glow & Indicator States
         switch (state)
         {
             case Orbit.Models.AgentState.Working:
+                // WORKING: Subtle neon purple activity glow
                 PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
                 var workAnim = new DoubleAnimation
                 {
                     From = 0.45,
-                    To = 0.90,
-                    Duration = TimeSpan.FromSeconds(1.2),
+                    To = 0.85,
+                    Duration = TimeSpan.FromSeconds(1.4),
                     AutoReverse = true,
                     RepeatBehavior = RepeatBehavior.Forever,
                     EasingFunction = colorEase
@@ -304,12 +340,13 @@ public partial class EyeMascot : UserControl
                 break;
 
             case Orbit.Models.AgentState.Attention:
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F59E0B");
+                // ATTENTION: Red/Amber accent accompanied by the tiny red exclamation badge
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
                 var attnAnim = new DoubleAnimation
                 {
-                    From = 0.55,
-                    To = 0.95,
-                    Duration = TimeSpan.FromSeconds(0.9),
+                    From = 0.50,
+                    To = 0.85,
+                    Duration = TimeSpan.FromSeconds(1.0),
                     AutoReverse = true,
                     RepeatBehavior = RepeatBehavior.Forever,
                     EasingFunction = colorEase
@@ -317,20 +354,29 @@ public partial class EyeMascot : UserControl
                 PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
                 break;
 
+            case Orbit.Models.AgentState.Completed:
+                // DONE: Emerald green completion indicator
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
+                var doneAnim = new DoubleAnimation
+                {
+                    From = 0.55,
+                    To = 0.90,
+                    Duration = TimeSpan.FromSeconds(1.8),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = colorEase
+                };
+                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
+                break;
+
             case Orbit.Models.AgentState.Error:
                 PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
                 PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
-                PillGlow.Opacity = 0.85;
-                break;
-
-            case Orbit.Models.AgentState.Completed:
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
-                var compAnim = new DoubleAnimation(0.9, 0.4, TimeSpan.FromSeconds(2.0)) { EasingFunction = colorEase };
-                compAnim.Completed += (s, e) => StartIdleGlow();
-                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, compAnim);
+                PillGlow.Opacity = 0.80;
                 break;
 
             default:
+                // IDLE: Neutral appearance
                 PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
                 StartIdleGlow();
                 break;

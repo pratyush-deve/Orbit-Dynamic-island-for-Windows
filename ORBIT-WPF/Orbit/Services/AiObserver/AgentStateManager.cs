@@ -11,6 +11,8 @@ public interface IAgentStateManager : IDisposable
     AgentSessionInfo AntigravityIdeSession { get; }
     event Action<AgentSessionInfo, AgentSessionInfo>? StateUpdated;
     void Refresh();
+    bool ActivateApplication(AntigravityAppType appType);
+    void AcknowledgeCompletion(AntigravityAppType appType);
 }
 
 public sealed class AgentStateManager : IAgentStateManager
@@ -26,6 +28,7 @@ public sealed class AgentStateManager : IAgentStateManager
 
     private AgentSessionInfo _agSession;
     private AgentSessionInfo _ideSession;
+    private readonly HashSet<string> _acknowledgedCompletions = new(StringComparer.OrdinalIgnoreCase);
     private bool _disposed;
 
     public AgentSessionInfo AntigravitySession
@@ -53,7 +56,7 @@ public sealed class AgentStateManager : IAgentStateManager
         _sessionResolver = sessionResolver;
         _iconExtractor = iconExtractor;
 
-        // Initialize empty baseline sessions with extracted icons
+        // Initialize baseline sessions
         string agExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\antigravity\Antigravity.exe");
         string ideExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Programs\Antigravity IDE\Antigravity IDE.exe");
 
@@ -88,6 +91,29 @@ public sealed class AgentStateManager : IAgentStateManager
         EvaluateStateInternal();
     }
 
+    public bool ActivateApplication(AntigravityAppType appType)
+    {
+        bool success = _processMonitor.ActivateApplication(appType);
+        if (success)
+        {
+            AcknowledgeCompletion(appType);
+        }
+        return success;
+    }
+
+    public void AcknowledgeCompletion(AntigravityAppType appType)
+    {
+        lock (_lock)
+        {
+            string? cid = appType == AntigravityAppType.Antigravity ? _agSession.ConversationId : _ideSession.ConversationId;
+            if (!string.IsNullOrWhiteSpace(cid))
+            {
+                _acknowledgedCompletions.Add(cid);
+            }
+        }
+        EvaluateStateInternal();
+    }
+
     private void OnProcessesChanged(bool agRunning, bool ideRunning)
     {
         EvaluateStateInternal();
@@ -118,18 +144,18 @@ public sealed class AgentStateManager : IAgentStateManager
         newAgSession.IsProcessRunning = agRunning;
         newIdeSession.IsProcessRunning = ideRunning;
 
-        // Categorize summaries by app
+        // Categorize summaries by app without duplication
         RawConversationSummary? agSummary = null;
         RawConversationSummary? ideSummary = null;
 
         foreach (var s in summaries)
         {
             var appType = _sessionResolver.ResolveOriginatingApp(s, _processMonitor);
-            if (appType == AntigravityAppType.Antigravity && agSummary == null)
+            if (appType == AntigravityAppType.Antigravity && agSummary == null && agRunning)
             {
                 agSummary = s;
             }
-            else if (appType == AntigravityAppType.AntigravityIde && ideSummary == null)
+            else if (appType == AntigravityAppType.AntigravityIde && ideSummary == null && ideRunning)
             {
                 ideSummary = s;
             }
@@ -156,10 +182,19 @@ public sealed class AgentStateManager : IAgentStateManager
     {
         session.IsProcessRunning = isProcessRunning;
 
-        if (summary == null)
+        if (!isProcessRunning || summary == null)
         {
             session.State = AgentState.Idle;
-            session.StatusMessage = isProcessRunning ? "Idle (No task)" : "App not running";
+            session.StatusMessage = isProcessRunning ? "Idle" : "App not running";
+            session.TaskTitle = string.Empty;
+            session.WorkspaceName = string.Empty;
+            session.WorkspacePath = string.Empty;
+            session.ConversationId = string.Empty;
+            session.LatestPrompt = string.Empty;
+            session.LatestActivity = "Standing by";
+            session.ModifiedFiles = [];
+            session.ExecutedCommands = [];
+            session.StepCount = 0;
             return;
         }
 
@@ -177,7 +212,7 @@ public sealed class AgentStateManager : IAgentStateManager
         else
         {
             session.WorkspacePath = string.Empty;
-            session.WorkspaceName = "Global / No Workspace";
+            session.WorkspaceName = "Global Workspace";
         }
 
         // Pull transcript snapshot
@@ -189,6 +224,12 @@ public sealed class AgentStateManager : IAgentStateManager
         session.ExecutedCommands = transcript.ExecutedCommands;
 
         // State detection
+        bool isAcknowledged;
+        lock (_lock)
+        {
+            isAcknowledged = _acknowledgedCompletions.Contains(summary.ConversationId);
+        }
+
         if (summary.Killed)
         {
             session.State = AgentState.Cancelled;
@@ -202,19 +243,24 @@ public sealed class AgentStateManager : IAgentStateManager
         else if (transcript.IsWaitingForApproval)
         {
             session.State = AgentState.Attention;
-            session.StatusMessage = "Awaiting user input or approval";
+            session.StatusMessage = "Waiting for input";
         }
         else if (string.Equals(summary.Status, "CASCADE_RUN_STATUS_RUNNING", StringComparison.OrdinalIgnoreCase) || summary.NotFullyIdle)
         {
             session.State = AgentState.Working;
-            session.StatusMessage = !string.IsNullOrWhiteSpace(transcript.LatestActivity) ? transcript.LatestActivity : "Agent is actively working...";
+            session.StatusMessage = !string.IsNullOrWhiteSpace(transcript.LatestActivity) ? transcript.LatestActivity : "Processing task...";
+            // Clear acknowledged state when a new run begins
+            lock (_lock)
+            {
+                _acknowledgedCompletions.Remove(summary.ConversationId);
+            }
         }
         else if (string.Equals(summary.Status, "CASCADE_RUN_STATUS_IDLE", StringComparison.OrdinalIgnoreCase))
         {
-            // If it was modified recently (within 45s) and is now idle, mark as Completed
-            if ((DateTime.UtcNow - summary.LastModifiedTime).TotalSeconds < 45)
+            // If recently completed and not yet acknowledged by user
+            if (!isAcknowledged && (DateTime.UtcNow - summary.LastModifiedTime).TotalMinutes < 5.0)
             {
-                session.State = AgentState.Completed;
+                session.State = AgentState.Completed; // DONE
                 session.StatusMessage = "Task completed";
             }
             else

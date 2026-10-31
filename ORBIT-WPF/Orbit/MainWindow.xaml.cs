@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private readonly IOrbitAttentionManager? _attentionManager;
 
     private IntPtr _hwnd = IntPtr.Zero;
+    private bool _pendingOpenAiMonitor;
 
     public MainWindow(
         IMonitorService monitorService,
@@ -223,6 +224,7 @@ public partial class MainWindow : Window
         if (e.ChangedButton == MouseButton.Left)
         {
             OrbitLogger.Info(LogCategory, "Collapsed pill clicked. Initiating expansion.");
+            _pendingOpenAiMonitor = _attentionManager != null && _attentionManager.CurrentMascotState != Orbit.Models.AgentState.Idle;
             _lifecycleService.RequestExpand();
         }
     }
@@ -287,6 +289,11 @@ public partial class MainWindow : Window
                 _lifecycleService.SetState(CompanionState.Expanded);
                 Activate();
                 _overlayService.ReapplyTopmost(_hwnd);
+                if (_pendingOpenAiMonitor)
+                {
+                    _pendingOpenAiMonitor = false;
+                    IslandPanel.NavigateToAiMonitor();
+                }
                 OrbitLogger.Info(LogCategory, "Two-stage expansion completed.");
             };
 

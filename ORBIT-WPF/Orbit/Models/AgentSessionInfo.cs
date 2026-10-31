@@ -29,3 +29,4 @@ public class AgentSessionInfo
     public List<string> ExecutedCommands { get; set; } = [];
     public bool IsProcessRunning { get; set; }
 }
+

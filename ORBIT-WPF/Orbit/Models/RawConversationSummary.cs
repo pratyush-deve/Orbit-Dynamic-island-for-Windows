@@ -15,3 +15,4 @@ public class RawConversationSummary
     public bool Killed { get; set; }
     public DateTime LastUserInputTime { get; set; }
 }
+

@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.IO;
-using System.Management;
+using System.Runtime.InteropServices;
+using System.Text;
 using Orbit.Core;
 using Orbit.Models;
+using Orbit.Platform.Windows;
 
 namespace Orbit.Services.AiObserver;
 
@@ -13,6 +15,7 @@ public interface IAntigravityProcessMonitor : IDisposable
     IReadOnlyList<string> IdeWorkspaceDirectories { get; }
     event Action<bool, bool>? ProcessesChanged;
     void CheckProcesses();
+    bool ActivateApplication(AntigravityAppType appType);
 }
 
 public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
@@ -50,8 +53,8 @@ public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
         // Initial scan
         CheckProcesses();
 
-        // Background poll every 2.5 seconds as a lightweight watchdog
-        _timer = new System.Threading.Timer(_ => CheckProcesses(), null, TimeSpan.FromSeconds(2.5), TimeSpan.FromSeconds(2.5));
+        // Background poll every 2 seconds
+        _timer = new System.Threading.Timer(_ => CheckProcesses(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
     public void CheckProcesses()
@@ -60,7 +63,6 @@ public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
 
         bool prevAg, prevIde;
         bool currAg = false, currIde = false;
-        var workspaces = new List<string>();
 
         try
         {
@@ -80,54 +82,11 @@ public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
                     }
                     else if (string.Equals(name, "agy", StringComparison.OrdinalIgnoreCase))
                     {
-                        // agy daemon is the engine for Antigravity IDE
                         currIde = true;
                     }
                     else if (string.Equals(name, "language_server", StringComparison.OrdinalIgnoreCase))
                     {
-                        // language_server inside Antigravity resources
                         currAg = true;
-                    }
-                }
-                catch { }
-            }
-
-            // Extract active IDE workspaces from agy daemon command line arguments (e.g. --add-dir=...)
-            if (currIde)
-            {
-                try
-                {
-                    using var searcher = new ManagementObjectSearcher("SELECT ProcessId, Name, CommandLine FROM Win32_Process WHERE Name='agy.exe' OR Name='Antigravity IDE.exe'");
-                    foreach (ManagementObject obj in searcher.Get())
-                    {
-                        string cmd = obj["CommandLine"]?.ToString() ?? string.Empty;
-                        if (!string.IsNullOrWhiteSpace(cmd))
-                        {
-                            // Look for --add-dir=<path>
-                            int idx = 0;
-                            while ((idx = cmd.IndexOf("--add-dir=", idx, StringComparison.OrdinalIgnoreCase)) != -1)
-                            {
-                                int start = idx + 10;
-                                string path;
-                                if (start < cmd.Length && cmd[start] == '"')
-                                {
-                                    int end = cmd.IndexOf('"', start + 1);
-                                    path = end != -1 ? cmd.Substring(start + 1, end - start - 1) : cmd.Substring(start + 1);
-                                    idx = end != -1 ? end + 1 : cmd.Length;
-                                }
-                                else
-                                {
-                                    int end = cmd.IndexOf(' ', start);
-                                    path = end != -1 ? cmd.Substring(start, end - start) : cmd.Substring(start);
-                                    idx = end != -1 ? end + 1 : cmd.Length;
-                                }
-
-                                if (!string.IsNullOrWhiteSpace(path) && !workspaces.Contains(path, StringComparer.OrdinalIgnoreCase))
-                                {
-                                    workspaces.Add(path.Trim());
-                                }
-                            }
-                        }
                     }
                 }
                 catch { }
@@ -145,7 +104,6 @@ public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
             prevIde = _isAntigravityIdeRunning;
             _isAntigravityRunning = currAg;
             _isAntigravityIdeRunning = currIde;
-            _ideWorkspaces = workspaces;
 
             if (prevAg != currAg || prevIde != currIde)
             {
@@ -155,9 +113,105 @@ public sealed class AntigravityProcessMonitor : IAntigravityProcessMonitor
 
         if (changed)
         {
-            OrbitLogger.Info(LogCategory, $"Antigravity processes updated: Regular={currAg}, IDE={currIde}, IDE Workspaces={workspaces.Count}");
+            OrbitLogger.Info(LogCategory, $"Antigravity processes updated: Regular={currAg}, IDE={currIde}");
             ProcessesChanged?.Invoke(currAg, currIde);
         }
+    }
+
+    public bool ActivateApplication(AntigravityAppType appType)
+    {
+        string targetProcName = appType == AntigravityAppType.AntigravityIde ? "Antigravity IDE" : "Antigravity";
+        var procs = Process.GetProcessesByName(targetProcName);
+        if (procs.Length == 0)
+        {
+            OrbitLogger.Warn(LogCategory, $"No running processes found for {targetProcName}");
+            CheckProcesses();
+            return false;
+        }
+
+        IntPtr targetHwnd = IntPtr.Zero;
+
+        // 1. Try MainWindowHandle
+        foreach (var p in procs)
+        {
+            try
+            {
+                if (p.MainWindowHandle != IntPtr.Zero && NativeMethods.IsWindowVisible(p.MainWindowHandle))
+                {
+                    targetHwnd = p.MainWindowHandle;
+                    break;
+                }
+            }
+            catch { }
+        }
+
+        // 2. If MainWindowHandle is 0, enumerate windows belonging to these PIDs
+        if (targetHwnd == IntPtr.Zero)
+        {
+            var pids = procs.Select(p => (uint)p.Id).ToHashSet();
+            NativeMethods.EnumWindows((hwnd, _) =>
+            {
+                if (NativeMethods.IsWindowVisible(hwnd))
+                {
+                    NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
+                    if (pids.Contains(pid))
+                    {
+                        int len = NativeMethods.GetWindowTextLength(hwnd);
+                        if (len > 0)
+                        {
+                            targetHwnd = hwnd;
+                            return false; // Stop enumeration
+                        }
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+
+        if (targetHwnd != IntPtr.Zero)
+        {
+            try
+            {
+                if (NativeMethods.IsIconic(targetHwnd))
+                {
+                    NativeMethods.ShowWindow(targetHwnd, NativeMethods.SW_RESTORE);
+                }
+                else
+                {
+                    NativeMethods.ShowWindow(targetHwnd, NativeMethods.SW_SHOW);
+                }
+
+                // Attach thread input to bypass Windows focus restrictions
+                IntPtr foregroundWnd = NativeMethods.GetForegroundWindow();
+                uint foregroundThreadId = NativeMethods.GetWindowThreadProcessId(foregroundWnd, out _);
+                uint currentThreadId = NativeMethods.GetCurrentThreadId();
+
+                bool attached = false;
+                if (foregroundThreadId != currentThreadId && foregroundThreadId != 0)
+                {
+                    attached = NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, true);
+                }
+
+                NativeMethods.BringWindowToTop(targetHwnd);
+                bool success = NativeMethods.SetForegroundWindow(targetHwnd);
+
+                if (attached)
+                {
+                    NativeMethods.AttachThreadInput(currentThreadId, foregroundThreadId, false);
+                }
+
+                OrbitLogger.Info(LogCategory, $"Activated window 0x{targetHwnd:X} for {targetProcName}. Success: {success}");
+                return success;
+            }
+            catch (Exception ex)
+            {
+                OrbitLogger.Error(LogCategory, $"Failed to activate window for {targetProcName}", ex);
+                return false;
+            }
+        }
+
+        OrbitLogger.Warn(LogCategory, $"Could not find a valid visible window handle for {targetProcName}");
+        return false;
     }
 
     public void Dispose()

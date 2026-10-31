@@ -251,3 +251,4 @@ public sealed class AntigravityDatabaseObserver : IAntigravityDatabaseObserver
         _watcher?.Dispose();
     }
 }
+

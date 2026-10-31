@@ -109,5 +109,33 @@
 
             </StackPanel>
         </Border>
+
+        <!-- Tiny red circular exclamation badge (!) attached to top-right corner of mascot -->
+        <Border x:Name="AttentionBadge"
+                Width="14" Height="14"
+                CornerRadius="7"
+                Background="#EF4444"
+                BorderBrush="#FFFFFF"
+                BorderThickness="1.2"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="0,2,6,0"
+                Visibility="Collapsed"
+                Opacity="0"
+                IsHitTestVisible="False">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="AttentionBadgeScale" CenterX="7" CenterY="7" ScaleX="1" ScaleY="1"/>
+            </Border.RenderTransform>
+            <Border.Effect>
+                <DropShadowEffect Color="#EF4444" BlurRadius="6" ShadowDepth="0" Opacity="0.9"/>
+            </Border.Effect>
+            <TextBlock Text="!" 
+                       FontSize="9" 
+                       FontWeight="Bold" 
+                       Foreground="#FFFFFF" 
+                       HorizontalAlignment="Center" 
+                       VerticalAlignment="Center" 
+                       Margin="0,-1,0,0"/>
+        </Border>
     </Grid>
 </UserControl>
