@@ -300,7 +300,8 @@
                                                        Margin="4,0,4,0"
                                                        CardBadge="AI"
                                                        CardLabel="AI Agent"
-                                                       ToolTip="AI Agent Companion">
+                                                       ToolTip="AI Agent Monitor"
+                                                       Click="OnCardAiAgentClicked">
                                 <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                     <!-- Primary 4-point AI neural sparkle -->
                                     <Path Data="M12,1 C12,6.5 14,8.5 20,11 C14,13.5 12,15.5 12,21 C12,15.5 10,13.5 4,11 C10,8.5 12,6.5 12,1 Z"
@@ -422,6 +423,15 @@
                           HorizontalAlignment="Stretch">
                         <panels:ManageAppsView x:Name="ManageAppsPanel"
                                                BackRequested="OnManageAppsBackRequested"/>
+                    </Grid>
+
+                    <!-- View F: AI Agent Monitor View -->
+                    <Grid x:Name="AiMonitorContainer"
+                          Visibility="Collapsed"
+                          Opacity="0.0"
+                          HorizontalAlignment="Stretch">
+                        <panels:AiAgentMonitorView x:Name="AiMonitorPanel"
+                                                   BackRequested="OnAiMonitorBackRequested"/>
                     </Grid>
                 </Grid>
             </Grid>

@@ -6,6 +6,7 @@ using Orbit.Core;
 using Orbit.Integrations.Desktop;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.SystemControls;
 
@@ -36,6 +37,8 @@ public partial class MainWindow : Window
     private readonly IWindowManager _windowManager;
     private readonly ISystemControlsService? _systemControlsService;
     private readonly IDevWorkspaceService? _devWorkspaceService;
+    private readonly IAgentStateManager? _agentStateManager;
+    private readonly IOrbitAttentionManager? _attentionManager;
 
     private IntPtr _hwnd = IntPtr.Zero;
 
@@ -48,7 +51,9 @@ public partial class MainWindow : Window
         IGlobalHotkeyService hotkeyService,
         IWindowManager windowManager,
         ISystemControlsService? systemControlsService = null,
-        IDevWorkspaceService? devWorkspaceService = null)
+        IDevWorkspaceService? devWorkspaceService = null,
+        IAgentStateManager? agentStateManager = null,
+        IOrbitAttentionManager? attentionManager = null)
     {
         InitializeComponent();
 
@@ -61,6 +66,8 @@ public partial class MainWindow : Window
         _windowManager = windowManager;
         _systemControlsService = systemControlsService;
         _devWorkspaceService = devWorkspaceService;
+        _agentStateManager = agentStateManager;
+        _attentionManager = attentionManager;
 
         // Wire lifecycle service events
         _lifecycleService.StateChanged += OnStateChanged;
@@ -90,9 +97,17 @@ public partial class MainWindow : Window
         PillMascot.SetGlowEnabled(glow);
         IslandPanel.SetGlowStatus(glow);
 
-        // Initialize active apps manager, system controls, dev workspace, and responsive height changes
-        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService);
+        // Initialize active apps manager, system controls, dev workspace, AI agent monitor, and responsive height changes
+        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
+
+        if (_attentionManager != null)
+        {
+            _attentionManager.MascotStateChanged += (state, msg) =>
+            {
+                Dispatcher.Invoke(() => PillMascot.SetAiState(state, msg));
+            };
+        }
 
         if (_systemControlsService != null)
         {

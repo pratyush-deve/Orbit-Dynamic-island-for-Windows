@@ -1,0 +1,526 @@
+<UserControl x:Class="Orbit.UI.Panels.AiAgentMonitorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="510" d:DesignWidth="440">
+
+    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Top" Background="Transparent" MouseLeftButtonDown="OnViewBackgroundMouseDown">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Header with Back, Title, Status, Refresh -->
+            <RowDefinition Height="Auto"/>
+            <!-- Row 1: Agent Selection Cards (Antigravity & Antigravity IDE) -->
+            <RowDefinition Height="Auto"/>
+            <!-- Row 2: Detailed Agent Activity Panel -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 1. Header Toolbar -->
+        <Grid Grid.Row="0" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Back Button -->
+            <Button x:Name="BtnBack"
+                    Grid.Column="0"
+                    Width="24"
+                    Height="24"
+                    VerticalAlignment="Center"
+                    ToolTip="Back to Dashboard"
+                    Cursor="Hand"
+                    Click="OnBackClicked">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="BackBorder"
+                                Background="#221834"
+                                BorderBrush="#472C6F"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+
+                            <Path x:Name="ArrowGlyph"
+                                  Data="M9,4 L5,8 L9,12 M5,8 L13,8"
+                                  Stroke="{DynamicResource Brush.Text.Muted}"
+                                  StrokeThickness="1.4"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#352458"/>
+                                <Setter TargetName="BackBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <Setter TargetName="ArrowGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="BackBorder" Property="Background" Value="#1C1032"/>
+                                <Setter TargetName="BackBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+
+            <!-- Title & Status Badge -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                <TextBlock Text="AI AGENT MONITOR"
+                           FontFamily="{DynamicResource Font.Main}"
+                           FontSize="12.5"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           VerticalAlignment="Center"/>
+
+                <Border x:Name="BadgeActiveAgents"
+                        Background="#2B1A4A"
+                        BorderBrush="{DynamicResource Brush.Accent.Border}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="6,1"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtActiveCount"
+                               Text="2 AGENTS"
+                               FontSize="8.5"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Refresh Button -->
+            <Button x:Name="BtnRefresh"
+                    Grid.Column="2"
+                    Width="24"
+                    Height="24"
+                    VerticalAlignment="Center"
+                    ToolTip="Refresh Agent Status"
+                    Cursor="Hand"
+                    Click="OnRefreshClicked">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="RefreshBorder"
+                                Background="#221834"
+                                BorderBrush="#472C6F"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+
+                            <Path x:Name="RefreshGlyph"
+                                  Data="M11,4 A4.5,4.5 0 1,0 13.5,8.5 M11,1.5 L11,4 L13.5,4"
+                                  Stroke="{DynamicResource Brush.Text.Muted}"
+                                  StrokeThickness="1.3"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RefreshBorder" Property="Background" Value="#352458"/>
+                                <Setter TargetName="RefreshBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <Setter TargetName="RefreshGlyph" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="RefreshBorder" Property="Background" Value="#1C1032"/>
+                                <Setter TargetName="RefreshBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+
+        <!-- 2. Dual Agent Cards (Interactive selection) -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Card 1: Antigravity -->
+            <Border x:Name="CardAntigravity"
+                    Grid.Column="0"
+                    Height="76"
+                    Background="#191226"
+                    BorderBrush="#3D295F"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="8"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="OnCardAntigravityClicked">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Row: Icon + Name + Status Badge -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- App Icon -->
+                        <Image x:Name="ImgAgIcon"
+                               Grid.Column="0"
+                               Width="18"
+                               Height="18"
+                               Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                        <!-- App Name -->
+                        <TextBlock Grid.Column="1"
+                                   Text="Antigravity"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <!-- Status Badge -->
+                        <Border x:Name="BadgeAgState"
+                                Grid.Column="2"
+                                CornerRadius="4"
+                                Padding="5,1"
+                                Background="#2A1E3C">
+                            <TextBlock x:Name="TxtAgState"
+                                       Text="IDLE"
+                                       FontSize="8"
+                                       FontWeight="Bold"
+                                       Foreground="#A78BFA"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Bottom: Task Title & Workspace -->
+                    <StackPanel Grid.Row="1" VerticalAlignment="Bottom" Margin="0,4,0,0">
+                        <TextBlock x:Name="TxtAgTaskTitle"
+                                   Text="No active task"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="9.5"
+                                   Foreground="#D1D5DB"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="TxtAgWorkspace"
+                                   Text="Standing by"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="8.5"
+                                   Foreground="{DynamicResource Brush.Text.Muted}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,1,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Card 2: Antigravity IDE -->
+            <Border x:Name="CardAntigravityIde"
+                    Grid.Column="2"
+                    Height="76"
+                    Background="#191226"
+                    BorderBrush="#3D295F"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="8"
+                    Cursor="Hand"
+                    MouseLeftButtonDown="OnCardAntigravityIdeClicked">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Row: Icon + Name + Status Badge -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- App Icon -->
+                        <Image x:Name="ImgIdeIcon"
+                               Grid.Column="0"
+                               Width="18"
+                               Height="18"
+                               Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
+
+                        <!-- App Name -->
+                        <TextBlock Grid.Column="1"
+                                   Text="Antigravity IDE"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"/>
+
+                        <!-- Status Badge -->
+                        <Border x:Name="BadgeIdeState"
+                                Grid.Column="2"
+                                CornerRadius="4"
+                                Padding="5,1"
+                                Background="#2A1E3C">
+                            <TextBlock x:Name="TxtIdeState"
+                                       Text="IDLE"
+                                       FontSize="8"
+                                       FontWeight="Bold"
+                                       Foreground="#A78BFA"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Bottom: Task Title & Workspace -->
+                    <StackPanel Grid.Row="1" VerticalAlignment="Bottom" Margin="0,4,0,0">
+                        <TextBlock x:Name="TxtIdeTaskTitle"
+                                   Text="No active task"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="9.5"
+                                   Foreground="#D1D5DB"
+                                   FontWeight="SemiBold"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="TxtIdeWorkspace"
+                                   Text="Standing by"
+                                   FontFamily="{DynamicResource Font.Main}"
+                                   FontSize="8.5"
+                                   Foreground="{DynamicResource Brush.Text.Muted}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,1,0,0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 3. Detailed Agent Activity Panel -->
+        <Border Grid.Row="2"
+                Background="#150E22"
+                BorderBrush="#3A255A"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="10">
+            <Grid>
+                <!-- Detail Content Container -->
+                <ScrollViewer x:Name="DetailScrollViewer"
+                              VerticalScrollBarVisibility="Hidden"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Focusable="False">
+                    <StackPanel>
+                        <!-- Top Metadata Row: Selected App + Step Count -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock x:Name="TxtDetailAppName"
+                                           Text="Antigravity IDE"
+                                           FontSize="11.5"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                <TextBlock Text=" • "
+                                           Foreground="{DynamicResource Brush.Text.Muted}"
+                                           FontSize="10"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtDetailWorkspace"
+                                           Text="Orbit 2"
+                                           FontSize="10"
+                                           Foreground="{DynamicResource Brush.Text.Muted}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+
+                            <Border x:Name="BadgeStepCount"
+                                    Grid.Column="1"
+                                    Background="#221838"
+                                    BorderBrush="#4C2F7A"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="5,1">
+                                <TextBlock x:Name="TxtDetailStepCount"
+                                           Text="Step 0"
+                                           FontSize="8.5"
+                                           FontWeight="Bold"
+                                           Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
+                            </Border>
+                        </Grid>
+
+                        <!-- Task Title Header -->
+                        <TextBlock x:Name="TxtDetailTaskTitle"
+                                   Text="Orbit 2 CTRL Section Implementation"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text.Primary}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- User Prompt Section -->
+                        <Border Background="#1C142C"
+                                BorderBrush="#352055"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,4">
+                                    <TextBlock Text="USER PROMPT"
+                                               FontSize="8.5"
+                                               FontWeight="Bold"
+                                               Foreground="#8B5CF6"/>
+                                    <TextBlock x:Name="BtnTogglePrompt"
+                                               Text="Show More"
+                                               FontSize="8.5"
+                                               Foreground="{DynamicResource Brush.Accent.PurpleLight}"
+                                               HorizontalAlignment="Right"
+                                               Cursor="Hand"
+                                               MouseLeftButtonDown="OnTogglePromptClicked"/>
+                                </Grid>
+
+                                <TextBlock x:Name="TxtDetailPrompt"
+                                           Text="No prompt submitted yet."
+                                           FontSize="10"
+                                           Foreground="#E5E7EB"
+                                           TextWrapping="Wrap"
+                                           MaxHeight="50"
+                                           TextTrimming="CharacterEllipsis"
+                                           LineHeight="14"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Latest Meaningful Activity Section -->
+                        <Border Background="#1C142C"
+                                BorderBrush="#352055"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8"
+                                Margin="0,0,0,8">
+                            <StackPanel>
+                                <TextBlock Text="CURRENT ACTIVITY"
+                                           FontSize="8.5"
+                                           FontWeight="Bold"
+                                           Foreground="#8B5CF6"
+                                           Margin="0,0,0,4"/>
+                                <TextBlock x:Name="TxtDetailLatestActivity"
+                                           Text="Agent standing by."
+                                           FontSize="10"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource Brush.Text.Primary}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Modified Files Section (if any) -->
+                        <StackPanel x:Name="PanelModifiedFiles" Margin="0,0,0,8" Visibility="Collapsed">
+                            <TextBlock x:Name="TxtHeaderModifiedFiles"
+                                       Text="MODIFIED FILES"
+                                       FontSize="8.5"
+                                       FontWeight="Bold"
+                                       Foreground="#8B5CF6"
+                                       Margin="0,0,0,4"/>
+                            <ItemsControl x:Name="ItemsModifiedFiles">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#201534"
+                                                BorderBrush="#3D2660"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                Margin="0,0,0,3">
+                                            <TextBlock Text="{Binding}"
+                                                       FontSize="9"
+                                                       Foreground="#A78BFA"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Recent Executed Commands Section (if any) -->
+                        <StackPanel x:Name="PanelExecutedCommands" Margin="0,0,0,4" Visibility="Collapsed">
+                            <TextBlock x:Name="TxtHeaderCommands"
+                                       Text="RECENT COMMANDS"
+                                       FontSize="8.5"
+                                       FontWeight="Bold"
+                                       Foreground="#8B5CF6"
+                                       Margin="0,0,0,4"/>
+                            <ItemsControl x:Name="ItemsExecutedCommands">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#191128"
+                                                BorderBrush="#331E50"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                Margin="0,0,0,3">
+                                            <TextBlock Text="{Binding}"
+                                                       FontSize="8.5"
+                                                       FontFamily="Consolas"
+                                                       Foreground="#C4B5FD"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Empty State Message (shown when no task is active) -->
+                <StackPanel x:Name="PanelEmptyState"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            Visibility="Collapsed">
+                    <Path Data="M12,2 A10,10 0 1,0 22,12 A10,10 0 0,0 12,2 M12,7 A1,1 0 1,1 11,8 A1,1 0 0,1 12,7 M12,11 L12,17"
+                          Stroke="#6D5A88"
+                          StrokeThickness="1.5"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Width="24"
+                          Height="24"
+                          HorizontalAlignment="Center"
+                          Margin="0,0,0,8"/>
+                    <TextBlock Text="No active AI agent tasks"
+                               FontSize="11"
+                               FontWeight="Bold"
+                               Foreground="{DynamicResource Brush.Text.Muted}"
+                               HorizontalAlignment="Center"/>
+                    <TextBlock Text="Submit a task in Antigravity or Antigravity IDE to monitor live progress."
+                               FontSize="9.5"
+                               Foreground="#6B5982"
+                               HorizontalAlignment="Center"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center"
+                               Margin="20,4,20,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

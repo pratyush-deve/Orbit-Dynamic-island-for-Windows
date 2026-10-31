@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Orbit.Integrations.Desktop;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.SystemControls;
 
@@ -54,7 +55,15 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<IAppDiscoveryService, AppDiscoveryService>();
         services.AddSingleton<IDevWorkspaceService, DevWorkspaceService>();
 
-        // 6. Windows
+        // 6. AI Agent Hub / Antigravity Observer
+        services.AddSingleton<IAntigravityProcessMonitor, AntigravityProcessMonitor>();
+        services.AddSingleton<IAntigravityDatabaseObserver, AntigravityDatabaseObserver>();
+        services.AddSingleton<IAntigravityTranscriptWatcher, AntigravityTranscriptWatcher>();
+        services.AddSingleton<IAntigravitySessionResolver, AntigravitySessionResolver>();
+        services.AddSingleton<IAgentStateManager, AgentStateManager>();
+        services.AddSingleton<IOrbitAttentionManager, OrbitAttentionManager>();
+
+        // 7. Windows
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -78,6 +87,10 @@ public sealed class OrbitApplication : IDisposable
             _serviceProvider.GetService<IWindowManager>()?.Dispose();
             _serviceProvider.GetService<ISystemControlsService>()?.Dispose();
             _serviceProvider.GetService<IDevWorkspaceService>()?.Dispose();
+            _serviceProvider.GetService<IAgentStateManager>()?.Dispose();
+            _serviceProvider.GetService<IAntigravityDatabaseObserver>()?.Dispose();
+            _serviceProvider.GetService<IAntigravityProcessMonitor>()?.Dispose();
+            _serviceProvider.GetService<IAntigravityTranscriptWatcher>()?.Dispose();
             _serviceProvider.Dispose();
         }
         catch (Exception ex)

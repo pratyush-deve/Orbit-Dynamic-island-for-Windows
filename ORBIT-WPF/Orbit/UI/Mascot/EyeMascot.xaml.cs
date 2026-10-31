@@ -277,4 +277,63 @@ public partial class EyeMascot : UserControl
 
         PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, glowAnimation);
     }
+
+    /// <summary>
+    /// Updates the mascot eye and pill visual state according to real-time AI agent status.
+    /// </summary>
+    public void SetAiState(Orbit.Models.AgentState state, string message = "")
+    {
+        if (PillGlow == null) return;
+
+        var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
+
+        switch (state)
+        {
+            case Orbit.Models.AgentState.Working:
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
+                var workAnim = new DoubleAnimation
+                {
+                    From = 0.45,
+                    To = 0.90,
+                    Duration = TimeSpan.FromSeconds(1.2),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = colorEase
+                };
+                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
+                break;
+
+            case Orbit.Models.AgentState.Attention:
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F59E0B");
+                var attnAnim = new DoubleAnimation
+                {
+                    From = 0.55,
+                    To = 0.95,
+                    Duration = TimeSpan.FromSeconds(0.9),
+                    AutoReverse = true,
+                    RepeatBehavior = RepeatBehavior.Forever,
+                    EasingFunction = colorEase
+                };
+                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
+                break;
+
+            case Orbit.Models.AgentState.Error:
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
+                PillGlow.Opacity = 0.85;
+                break;
+
+            case Orbit.Models.AgentState.Completed:
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
+                var compAnim = new DoubleAnimation(0.9, 0.4, TimeSpan.FromSeconds(2.0)) { EasingFunction = colorEase };
+                compAnim.Completed += (s, e) => StartIdleGlow();
+                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, compAnim);
+                break;
+
+            default:
+                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+                StartIdleGlow();
+                break;
+        }
+    }
 }

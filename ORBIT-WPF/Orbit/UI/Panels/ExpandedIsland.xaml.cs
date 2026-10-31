@@ -6,6 +6,7 @@ using System.Windows.Media.Animation;
 using Orbit.Core;
 using Orbit.Integrations.Desktop;
 using Orbit.Services;
+using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.SystemControls;
 using Orbit.UI.Mascot;
@@ -30,6 +31,7 @@ public partial class ExpandedIsland : UserControl
     public bool IsInControlsView { get; private set; }
     public bool IsInDevModeView { get; private set; }
     public bool IsInManageAppsView { get; private set; }
+    public bool IsInAiMonitorView { get; private set; }
 
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
@@ -61,6 +63,14 @@ public partial class ExpandedIsland : UserControl
             }
         };
 
+        AiMonitorPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInAiMonitorView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
         ActiveAppsPanel.DismissAndCollapseRequested += OnActiveAppsDismissAndCollapseRequested;
 
         CardActiveApps.Click += OnCardActiveAppsClicked;
@@ -71,12 +81,17 @@ public partial class ExpandedIsland : UserControl
 
         CardDevMode.Click += OnCardDevModeClicked;
         CardDevMode.MouseLeftButtonUp += (s, e) => OnCardDevModeClicked(s, e);
+
+        CardAiAgent.Click += OnCardAiAgentClicked;
+        CardAiAgent.MouseLeftButtonUp += (s, e) => OnCardAiAgentClicked(s, e);
     }
 
     public void Initialize(
         IWindowManager windowManager,
         ISystemControlsService? controlsService = null,
-        IDevWorkspaceService? workspaceService = null)
+        IDevWorkspaceService? workspaceService = null,
+        IAgentStateManager? agentStateManager = null,
+        IOrbitAttentionManager? attentionManager = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
         if (controlsService != null)
@@ -87,6 +102,17 @@ public partial class ExpandedIsland : UserControl
         {
             DevModePanel.Initialize(workspaceService);
             ManageAppsPanel.Initialize(workspaceService);
+        }
+        if (agentStateManager != null)
+        {
+            AiMonitorPanel.Initialize(agentStateManager);
+        }
+        if (attentionManager != null)
+        {
+            attentionManager.MascotStateChanged += (state, msg) =>
+            {
+                Dispatcher.Invoke(() => IslandMascot.SetAiState(state, msg));
+            };
         }
     }
 
@@ -116,6 +142,7 @@ public partial class ExpandedIsland : UserControl
         IsInControlsView = false;
         IsInDevModeView = false;
         IsInManageAppsView = false;
+        IsInAiMonitorView = false;
 
         ActiveAppsContainer.BeginAnimation(OpacityProperty, null);
         ActiveAppsContainer.Visibility = Visibility.Collapsed;
@@ -132,6 +159,10 @@ public partial class ExpandedIsland : UserControl
         ManageAppsContainer.BeginAnimation(OpacityProperty, null);
         ManageAppsContainer.Visibility = Visibility.Collapsed;
         ManageAppsContainer.Opacity = 0.0;
+
+        AiMonitorContainer.BeginAnimation(OpacityProperty, null);
+        AiMonitorContainer.Visibility = Visibility.Collapsed;
+        AiMonitorContainer.Opacity = 0.0;
 
         HomeContentView.BeginAnimation(OpacityProperty, null);
         HomeContentView.Visibility = Visibility.Visible;
@@ -419,6 +450,73 @@ public partial class ExpandedIsland : UserControl
             DevModeContainer.BeginAnimation(OpacityProperty, fadeIn);
         };
         ManageAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnCardAiAgentClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (IsInAiMonitorView || IsInDevModeView || IsInControlsView || IsInActiveAppsView) return;
+        OrbitLogger.Info(LogCategory, "AI card clicked. Switching to AI Agent Monitor view.");
+
+        IsInAiMonitorView = true;
+        DesiredHeightChanged?.Invoke(AiMonitorPanel.GetDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            AiMonitorContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                AiMonitorContainer.BeginAnimation(OpacityProperty, null);
+                AiMonitorContainer.Opacity = 1.0;
+            };
+            AiMonitorContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnAiMonitorBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in AI Agent Monitor view. Returning to Home.");
+
+        IsInAiMonitorView = false;
+        DesiredHeightChanged?.Invoke(240.0);
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            AiMonitorContainer.BeginAnimation(OpacityProperty, null);
+            AiMonitorContainer.Visibility = Visibility.Collapsed;
+            AiMonitorContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        AiMonitorContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     private void OnMascotClicked(object sender, MouseButtonEventArgs e)

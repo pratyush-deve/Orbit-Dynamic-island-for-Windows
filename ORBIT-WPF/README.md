@@ -26,7 +26,14 @@
 
 3. **Dynamic Responsive Layout**:
    - Screen-adaptive downward height expansion anchored to top screen position.
-   - Smooth cubic easing transitions between Home, DEV, Manage Apps, and CTRL modes.
+   - Smooth cubic easing transitions between Home, DEV, Manage Apps, CTRL, and AI modes.
+
+4. **AI Mode (Antigravity AI Agent Hub & Observer)**:
+   - Non-intrusive, read-only observation of both **Antigravity** and **Antigravity IDE** agent sessions.
+   - SQLite WAL read-only queries with FileSystemWatcher debouncing against `~/.gemini/antigravity/conversation_summaries.db`.
+   - Streaming transcript updates (`transcript.jsonl`) extracting user prompts, file modifications, and shell commands.
+   - Interactive dual-card UI with dynamic auto-selection, expandable prompt view, modified files counter, and recent command activity list.
+   - Dynamic mascot state synchronization: Working (pulsing purple), Attention Needed (amber), Error (red), Completed (green), Idle (violet).
 
 ---
 
