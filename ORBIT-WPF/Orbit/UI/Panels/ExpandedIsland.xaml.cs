@@ -172,7 +172,7 @@ public partial class ExpandedIsland : UserControl
 
         HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
 
-        DesiredHeightChanged?.Invoke(240.0);
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
     }
 
     private void OnActiveAppsDismissAndCollapseRequested()
@@ -222,8 +222,8 @@ public partial class ExpandedIsland : UserControl
 
         IsInActiveAppsView = false;
 
-        // Reset to standard expanded height (240 DIPs)
-        DesiredHeightChanged?.Invoke(240.0);
+        // Reset to content-driven home expanded height
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -290,7 +290,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in System Controls view. Returning to Home.");
 
         IsInControlsView = false;
-        DesiredHeightChanged?.Invoke(240.0);
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -358,7 +358,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in Dev Mode view. Returning to Home.");
 
         IsInDevModeView = false;
-        DesiredHeightChanged?.Invoke(240.0);
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -503,7 +503,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in AI Agent Monitor view. Returning to Home.");
 
         IsInAiMonitorView = false;
-        DesiredHeightChanged?.Invoke(240.0);
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -529,6 +529,39 @@ public partial class ExpandedIsland : UserControl
             HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
         };
         AiMonitorContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    /// <summary>
+    /// Calculates the dynamic content-driven height required for the Home view,
+    /// measuring the actual rendered visual tree (mascot, branding, cards carousel, framing).
+    /// </summary>
+    public double CalculateHomeDesiredHeight()
+    {
+        try
+        {
+            var previousVisibility = HomeContentView.Visibility;
+            HomeContentView.Visibility = Visibility.Visible;
+
+            // Measure RootIsland against the standard expanded width (440 DIPs) with unconstrained vertical space
+            RootIsland.Measure(new System.Windows.Size(MainWindow.ExpandedWidth, double.PositiveInfinity));
+            double measuredHeight = RootIsland.DesiredSize.Height;
+
+            HomeContentView.Visibility = previousVisibility;
+
+            if (measuredHeight > 150)
+            {
+                // Round up with a 4-DIP subpixel breathing buffer
+                return Math.Max(264.0, Math.Ceiling(measuredHeight + 4.0));
+            }
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Failed to measure home content height: {ex.Message}");
+        }
+
+        // Reliable calculated fallback based on measured visual hierarchy:
+        // Framing & margins (40) + Mascot (57) + Branding (54) + Card Row (106) + Padding = 266 DIPs
+        return 266.0;
     }
 
     private void OnHomeCardsScrollViewerPreviewMouseWheel(object sender, MouseWheelEventArgs e)

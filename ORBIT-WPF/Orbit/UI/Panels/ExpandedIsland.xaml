@@ -28,7 +28,7 @@
                     <!-- Row 0: Eyes Mascot (clicking collapses) -->
                     <RowDefinition Height="Auto"/>
                     <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <!-- Top-Left Task Manager Shortcut Button -->
@@ -169,16 +169,24 @@
                 <Grid x:Name="IslandBodyContent"
                       Grid.Row="1"
                       Opacity="1.0"
-                      HorizontalAlignment="Stretch">
+                      HorizontalAlignment="Stretch"
+                      ClipToBounds="False">
 
-                    <!-- View A: Four Navigation Cards (Home View) -->
-                    <StackPanel x:Name="HomeContentView"
-                                Visibility="Visible"
-                                Opacity="1.0"
-                                HorizontalAlignment="Stretch">
+                    <!-- View A: Navigation Cards (Home View) -->
+                    <Grid x:Name="HomeContentView"
+                          Visibility="Visible"
+                          Opacity="1.0"
+                          HorizontalAlignment="Stretch"
+                          ClipToBounds="False">
+                        <Grid.RowDefinitions>
+                            <!-- Row 0: Header Branding: ORBIT + v2.0 + Subtitle -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- Row 1: Horizontally Scrollable Interactive Navigation Cards Row -->
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
                         <!-- Header Branding: ORBIT + v2.0 + Subtitle -->
-                        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,12">
+                        <StackPanel Grid.Row="0" HorizontalAlignment="Center" Margin="0,0,0,12">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                                 <TextBlock Text="ORBIT"
                                            FontFamily="{DynamicResource Font.Main}"
@@ -215,10 +223,12 @@
 
                         <!-- Horizontally Scrollable Interactive Navigation Cards Row -->
                         <ScrollViewer x:Name="HomeCardsScrollViewer"
+                                      Grid.Row="1"
                                       HorizontalScrollBarVisibility="Hidden"
                                       VerticalScrollBarVisibility="Disabled"
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Center"
+                                      MinHeight="106"
                                       Focusable="False"
                                       CanContentScroll="False"
                                       PanningMode="HorizontalOnly"
@@ -230,7 +240,7 @@
                                 <!-- Card 1: Dev Mode -->
                                 <components:NavigationCard x:Name="CardDevMode"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,10,0"
                                                            CardBadge="DEV"
                                                            CardLabel="Dev Mode"
@@ -256,7 +266,7 @@
                                 <!-- Card 2: Active Apps -->
                                 <components:NavigationCard x:Name="CardActiveApps"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,10,0"
                                                            CardBadge="APPS"
                                                            CardLabel="Active Apps"
@@ -304,7 +314,7 @@
                                 <!-- Card 3: AI Agent -->
                                 <components:NavigationCard x:Name="CardAiAgent"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,10,0"
                                                            CardBadge="AI"
                                                            CardLabel="AI Agent"
@@ -339,7 +349,7 @@
                                 <!-- Card 4: Quick Controls -->
                                 <components:NavigationCard x:Name="CardControls"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,10,0"
                                                            CardBadge="CTRL"
                                                            CardLabel="Controls"
@@ -398,7 +408,7 @@
                                 <!-- Card 5: Social Hub -->
                                 <components:NavigationCard x:Name="CardSocial"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,10,0"
                                                            CardBadge="SOCIAL"
                                                            CardLabel="Social Hub"
@@ -445,7 +455,7 @@
                                 <!-- Card 6: Documents -->
                                 <components:NavigationCard x:Name="CardDocs"
                                                            Width="94"
-                                                           Height="92"
+                                                           Height="94"
                                                            Margin="0,0,0,0"
                                                            CardBadge="DOCS"
                                                            CardLabel="Documents"
@@ -482,7 +492,7 @@
                                 </components:NavigationCard>
                             </StackPanel>
                         </ScrollViewer>
-                    </StackPanel>
+                    </Grid>
 
                     <!-- View B: Active Apps Manager View -->
                     <Grid x:Name="ActiveAppsContainer"

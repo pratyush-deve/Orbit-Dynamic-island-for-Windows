@@ -25,7 +25,7 @@ public partial class MainWindow : Window
     public const double CollapsedWidth = 140.0;
     public const double CollapsedHeight = 56.0;
     public const double ExpandedWidth = 440.0;
-    public const double ExpandedHeight = 240.0;
+    public const double ExpandedHeight = 266.0;
     public const double TopMargin = 14.0;
 
     private readonly IMonitorService _monitorService;
@@ -268,8 +268,10 @@ public partial class MainWindow : Window
 
         widthAnim.Completed += (s, e) =>
         {
-            // STAGE 2: Vertical Expansion (Height expands 56 -> 260 downwards)
-            var heightAnim = new DoubleAnimation(ExpandedHeight, stage2Duration) { EasingFunction = ease };
+            double targetExpandedHeight = IslandPanel.CalculateHomeDesiredHeight();
+
+            // STAGE 2: Vertical Expansion (Height expands 56 -> content-driven height downwards)
+            var heightAnim = new DoubleAnimation(targetExpandedHeight, stage2Duration) { EasingFunction = ease };
 
             // Content gently fades in during Stage 2
             IslandPanel.AnimateBodyOpacity(1.0, TimeSpan.FromMilliseconds(200));
@@ -282,7 +284,7 @@ public partial class MainWindow : Window
                 BeginAnimation(LeftProperty, null);
 
                 Width = ExpandedWidth;
-                Height = ExpandedHeight;
+                Height = targetExpandedHeight;
                 Left = expandedLeft;
                 Top = topY;
 
