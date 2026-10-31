@@ -8,6 +8,26 @@
 
 **ORBIT** is a minimal futuristic desktop companion designed specifically for Windows 11. It rests unobtrusively on your desktop as an animated pill with expressive vector eyes, reacts to cursor interactions, seamlessly expands into an island card on click, collapses automatically on loss of focus, supports drag-to-reposition across multi-monitor setups, and remains permanently recoverable via the Windows System Tray.
 
+### ✨ Completed Capabilities & Modes
+
+1. **CTRL Mode (System Controls)**:
+   - Compact 5-card horizontal control strip with equal dimensions.
+   - **Microphone**: Live global Windows capture mute/unmute toggle.
+   - **Wi-Fi**: Physical adapter enable/disable and real-time connected SSID detection.
+   - **Bluetooth**: Radio toggle and connected Bluetooth device name/count reporting.
+   - **System Volume**: Master audio endpoint mute toggle.
+   - **Settings**: Instant launch of native Windows Settings (`ms-settings:`).
+
+2. **DEV Mode (Developer Workspace Launcher)**:
+   - Dedicated development workspace launcher with automatic system discovery.
+   - Distinct, decoupled detection and icons for both **Antigravity** (multicoloured logo) and **Antigravity IDE** (blue waveform logo).
+   - One-click **ACTIVATE** button launching or foregrounding all selected development tools.
+   - **Manage Apps View**: Collapsible search, invisible scrollbar with smooth mouse-wheel scrolling, independent selection toggles, and JSON persistence (`dev_workspace.json`).
+
+3. **Dynamic Responsive Layout**:
+   - Screen-adaptive downward height expansion anchored to top screen position.
+   - Smooth cubic easing transitions between Home, DEV, Manage Apps, and CTRL modes.
+
 ---
 
 ## 🛠️ Architecture & Technology Stack

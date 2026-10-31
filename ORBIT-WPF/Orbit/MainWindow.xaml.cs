@@ -6,6 +6,8 @@ using Orbit.Core;
 using Orbit.Integrations.Desktop;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.DevWorkspace;
+using Orbit.Services.SystemControls;
 
 namespace Orbit;
 
@@ -32,6 +34,8 @@ public partial class MainWindow : Window
     private readonly IWindowLifecycleService _lifecycleService;
     private readonly IGlobalHotkeyService _hotkeyService;
     private readonly IWindowManager _windowManager;
+    private readonly ISystemControlsService? _systemControlsService;
+    private readonly IDevWorkspaceService? _devWorkspaceService;
 
     private IntPtr _hwnd = IntPtr.Zero;
 
@@ -42,7 +46,9 @@ public partial class MainWindow : Window
         IWindowPositionService positionService,
         IWindowLifecycleService lifecycleService,
         IGlobalHotkeyService hotkeyService,
-        IWindowManager windowManager)
+        IWindowManager windowManager,
+        ISystemControlsService? systemControlsService = null,
+        IDevWorkspaceService? devWorkspaceService = null)
     {
         InitializeComponent();
 
@@ -53,6 +59,8 @@ public partial class MainWindow : Window
         _lifecycleService = lifecycleService;
         _hotkeyService = hotkeyService;
         _windowManager = windowManager;
+        _systemControlsService = systemControlsService;
+        _devWorkspaceService = devWorkspaceService;
 
         // Wire lifecycle service events
         _lifecycleService.StateChanged += OnStateChanged;
@@ -70,29 +78,6 @@ public partial class MainWindow : Window
         OrbitLogger.Info(LogCategory, $"HWND initialized: 0x{_hwnd:X}");
 
         _overlayService.InitializeWindowHandle(_hwnd);
-
-        // Register Global Hotkey: Win + Ctrl + O
-        _hotkeyService.Register(_hwnd, NativeMethods.MOD_WIN | NativeMethods.MOD_CONTROL, 0x4F, () =>
-        {
-            Dispatcher.Invoke(() =>
-            {
-                if (Visibility == Visibility.Visible)
-                {
-                    if (_lifecycleService.CurrentState == CompanionState.Expanded)
-                    {
-                        _lifecycleService.RequestCollapse();
-                    }
-                    else if (_lifecycleService.CurrentState == CompanionState.Collapsed)
-                    {
-                        _lifecycleService.RequestExpand();
-                    }
-                }
-                else
-                {
-                    _lifecycleService.Show();
-                }
-            });
-        });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -105,9 +90,19 @@ public partial class MainWindow : Window
         PillMascot.SetGlowEnabled(glow);
         IslandPanel.SetGlowStatus(glow);
 
-        // Initialize active apps manager and responsive height changes
-        IslandPanel.Initialize(_windowManager);
+        // Initialize active apps manager, system controls, dev workspace, and responsive height changes
+        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
+
+        if (_systemControlsService != null)
+        {
+            _ = _systemControlsService.InitializeAsync();
+        }
+
+        if (_devWorkspaceService != null)
+        {
+            _ = _devWorkspaceService.InitializeAsync();
+        }
 
         OrbitLogger.Info(LogCategory, $"MainWindow loaded at top-centre [{Left:0.#}, {Top:0.#}]. State: {_lifecycleService.CurrentState}");
     }

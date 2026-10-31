@@ -1,0 +1,104 @@
+<UserControl x:Class="Orbit.UI.Components.DevAppRow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="40" d:DesignWidth="360"
+             Background="Transparent"
+             Cursor="Hand"
+             MouseLeftButtonUp="OnRowClicked">
+
+    <Border x:Name="RowBorder"
+            Background="#181128"
+            BorderBrush="#2D2146"
+            BorderThickness="1"
+            CornerRadius="7"
+            Padding="8,5,8,5"
+            Margin="0,2,0,2"
+            SnapsToDevicePixels="True"
+            MouseEnter="OnMouseEnter"
+            MouseLeave="OnMouseLeave">
+
+        <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center">
+            <Grid.ColumnDefinitions>
+                <!-- Col 0: App Icon (24x24) -->
+                <ColumnDefinition Width="Auto"/>
+                <!-- Col 1: App Name & Path Subtitle -->
+                <ColumnDefinition Width="*"/>
+                <!-- Col 2: Toggle Switch -->
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 1. Actual Application Icon -->
+            <Grid Grid.Column="0" Width="24" Height="24" Margin="0,0,9,0" VerticalAlignment="Center">
+                <Image x:Name="ImgIcon"
+                       Width="22"
+                       Height="22"
+                       RenderOptions.BitmapScalingMode="HighQuality"
+                       SnapsToDevicePixels="True"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"/>
+
+                <Border x:Name="FallbackIcon"
+                        Width="22"
+                        Height="22"
+                        Background="#261742"
+                        BorderBrush="#5A2E9D"
+                        BorderThickness="1"
+                        CornerRadius="5"
+                        Visibility="Collapsed"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtFallbackGlyph"
+                               Text="&lt;/&gt;"
+                               FontFamily="{DynamicResource Font.Mono}"
+                               FontSize="9"
+                               FontWeight="Bold"
+                               Foreground="#C084FC"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+            </Grid>
+
+            <!-- 2. Application Name -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                <TextBlock x:Name="TxtAppName"
+                           FontFamily="{DynamicResource Font.Main}"
+                           FontSize="11.5"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Text.Primary}"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+
+            <!-- 3. Sleek Purple Toggle Switch -->
+            <Border x:Name="ToggleTrack"
+                    Grid.Column="2"
+                    Width="36"
+                    Height="20"
+                    CornerRadius="10"
+                    Background="#241B38"
+                    BorderBrush="#4A3568"
+                    BorderThickness="1"
+                    VerticalAlignment="Center"
+                    MouseLeftButtonUp="OnToggleClicked">
+                <Border.Effect>
+                    <DropShadowEffect x:Name="ToggleGlow"
+                                      Color="{DynamicResource Color.Accent.PurpleLight}"
+                                      BlurRadius="6"
+                                      ShadowDepth="0"
+                                      Opacity="0.0"/>
+                </Border.Effect>
+
+                <Ellipse x:Name="ToggleThumb"
+                         Width="14"
+                         Height="14"
+                         Fill="#FFFFFF"
+                         HorizontalAlignment="Left"
+                         Margin="2.5,0,0,0"
+                         VerticalAlignment="Center"/>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>
+

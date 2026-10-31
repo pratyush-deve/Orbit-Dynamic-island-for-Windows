@@ -5,6 +5,7 @@ using Xunit;
 
 namespace Orbit.Tests;
 
+[Collection("UITests")]
 public class MainWindowCreationTests
 {
     [Fact]
@@ -18,7 +19,7 @@ public class MainWindowCreationTests
                 // Ensure Application exists
                 if (System.Windows.Application.Current == null)
                 {
-                    _ = new System.Windows.Application();
+                    try { _ = new System.Windows.Application(); } catch { }
                 }
 
                 var app = new OrbitApplication();

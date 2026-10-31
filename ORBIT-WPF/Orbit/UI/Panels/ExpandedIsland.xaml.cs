@@ -5,6 +5,9 @@ using System.Windows.Input;
 using System.Windows.Media.Animation;
 using Orbit.Core;
 using Orbit.Integrations.Desktop;
+using Orbit.Services;
+using Orbit.Services.DevWorkspace;
+using Orbit.Services.SystemControls;
 using Orbit.UI.Mascot;
 
 namespace Orbit.UI.Panels;
@@ -24,6 +27,9 @@ public partial class ExpandedIsland : UserControl
 
     public EyeMascot Mascot => IslandMascot;
     public bool IsInActiveAppsView { get; private set; }
+    public bool IsInControlsView { get; private set; }
+    public bool IsInDevModeView { get; private set; }
+    public bool IsInManageAppsView { get; private set; }
 
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
@@ -39,15 +45,49 @@ public partial class ExpandedIsland : UserControl
             }
         };
 
+        DevModePanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInDevModeView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
+        ManageAppsPanel.DesiredHeightChanged += (height) =>
+        {
+            if (IsInManageAppsView)
+            {
+                DesiredHeightChanged?.Invoke(height);
+            }
+        };
+
         ActiveAppsPanel.DismissAndCollapseRequested += OnActiveAppsDismissAndCollapseRequested;
 
         CardActiveApps.Click += OnCardActiveAppsClicked;
         CardActiveApps.MouseLeftButtonUp += (s, e) => OnCardActiveAppsClicked(s, e);
+
+        CardControls.Click += OnCardControlsClicked;
+        CardControls.MouseLeftButtonUp += (s, e) => OnCardControlsClicked(s, e);
+
+        CardDevMode.Click += OnCardDevModeClicked;
+        CardDevMode.MouseLeftButtonUp += (s, e) => OnCardDevModeClicked(s, e);
     }
 
-    public void Initialize(IWindowManager windowManager)
+    public void Initialize(
+        IWindowManager windowManager,
+        ISystemControlsService? controlsService = null,
+        IDevWorkspaceService? workspaceService = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
+        if (controlsService != null)
+        {
+            ControlsPanel.Initialize(controlsService);
+        }
+        if (workspaceService != null)
+        {
+            DevModePanel.Initialize(workspaceService);
+            ManageAppsPanel.Initialize(workspaceService);
+        }
     }
 
     public void SetGlowStatus(bool enabled)
@@ -73,9 +113,25 @@ public partial class ExpandedIsland : UserControl
     public void ResetToHomeView()
     {
         IsInActiveAppsView = false;
+        IsInControlsView = false;
+        IsInDevModeView = false;
+        IsInManageAppsView = false;
+
         ActiveAppsContainer.BeginAnimation(OpacityProperty, null);
         ActiveAppsContainer.Visibility = Visibility.Collapsed;
         ActiveAppsContainer.Opacity = 0.0;
+
+        ControlsContainer.BeginAnimation(OpacityProperty, null);
+        ControlsContainer.Visibility = Visibility.Collapsed;
+        ControlsContainer.Opacity = 0.0;
+
+        DevModeContainer.BeginAnimation(OpacityProperty, null);
+        DevModeContainer.Visibility = Visibility.Collapsed;
+        DevModeContainer.Opacity = 0.0;
+
+        ManageAppsContainer.BeginAnimation(OpacityProperty, null);
+        ManageAppsContainer.Visibility = Visibility.Collapsed;
+        ManageAppsContainer.Opacity = 0.0;
 
         HomeContentView.BeginAnimation(OpacityProperty, null);
         HomeContentView.Visibility = Visibility.Visible;
@@ -158,6 +214,211 @@ public partial class ExpandedIsland : UserControl
             HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
         };
         ActiveAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnCardControlsClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (IsInControlsView || IsInActiveAppsView) return;
+        OrbitLogger.Info(LogCategory, "CTRL card clicked. Switching to System Controls view.");
+
+        IsInControlsView = true;
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            ControlsContainer.Visibility = Visibility.Visible;
+            _ = ControlsPanel.RefreshStateAsync();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                ControlsContainer.BeginAnimation(OpacityProperty, null);
+                ControlsContainer.Opacity = 1.0;
+            };
+            ControlsContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnControlsBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in System Controls view. Returning to Home.");
+
+        IsInControlsView = false;
+        DesiredHeightChanged?.Invoke(240.0);
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            ControlsContainer.BeginAnimation(OpacityProperty, null);
+            ControlsContainer.Visibility = Visibility.Collapsed;
+            ControlsContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        ControlsContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnCardDevModeClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (IsInDevModeView || IsInControlsView || IsInActiveAppsView) return;
+        OrbitLogger.Info(LogCategory, "DEV card clicked. Switching to Dev Mode view.");
+
+        IsInDevModeView = true;
+        DesiredHeightChanged?.Invoke(DevModePanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            DevModeContainer.Visibility = Visibility.Visible;
+            DevModePanel.UpdateWorkspaceDisplay();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                DevModeContainer.BeginAnimation(OpacityProperty, null);
+                DevModeContainer.Opacity = 1.0;
+            };
+            DevModeContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnDevModeBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Dev Mode view. Returning to Home.");
+
+        IsInDevModeView = false;
+        DesiredHeightChanged?.Invoke(240.0);
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            DevModeContainer.BeginAnimation(OpacityProperty, null);
+            DevModeContainer.Visibility = Visibility.Collapsed;
+            DevModeContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        DevModeContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnDevModeManageAppsRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Manage Apps clicked in Dev Mode view. Switching to Manage Apps view.");
+
+        IsInDevModeView = false;
+        IsInManageAppsView = true;
+        DesiredHeightChanged?.Invoke(ManageAppsPanel.GetDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            DevModeContainer.BeginAnimation(OpacityProperty, null);
+            DevModeContainer.Visibility = Visibility.Collapsed;
+            DevModeContainer.Opacity = 0.0;
+
+            ManageAppsContainer.Visibility = Visibility.Visible;
+            ManageAppsPanel.UpdateAppsList();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                ManageAppsContainer.BeginAnimation(OpacityProperty, null);
+                ManageAppsContainer.Opacity = 1.0;
+            };
+            ManageAppsContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        DevModeContainer.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnManageAppsBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Manage Apps view. Returning to Dev Mode view.");
+
+        IsInManageAppsView = false;
+        IsInDevModeView = true;
+        DesiredHeightChanged?.Invoke(DevModePanel.CalculateDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            ManageAppsContainer.BeginAnimation(OpacityProperty, null);
+            ManageAppsContainer.Visibility = Visibility.Collapsed;
+            ManageAppsContainer.Opacity = 0.0;
+
+            DevModeContainer.Visibility = Visibility.Visible;
+            DevModePanel.UpdateWorkspaceDisplay();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                DevModeContainer.BeginAnimation(OpacityProperty, null);
+                DevModeContainer.Opacity = 1.0;
+            };
+            DevModeContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        ManageAppsContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     private void OnMascotClicked(object sender, MouseButtonEventArgs e)

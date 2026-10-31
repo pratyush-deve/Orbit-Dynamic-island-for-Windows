@@ -1,0 +1,200 @@
+<UserControl x:Class="Orbit.UI.Components.SystemControlCard"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             mc:Ignorable="d" 
+             d:DesignHeight="82" d:DesignWidth="86"
+             Background="Transparent"
+             Cursor="Hand"
+             Focusable="True"
+             MouseLeftButtonUp="OnCardMouseLeftButtonUp">
+
+    <UserControl.Resources>
+        <!-- Gradients for Enabled / Disabled States -->
+        <LinearGradientBrush x:Key="CardBrush.Enabled" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#281A46" Offset="0"/>
+            <GradientStop Color="#1A122E" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CardBrush.EnabledHover" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#36225F" Offset="0"/>
+            <GradientStop Color="#23173F" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CardBrush.Disabled" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#181423" Offset="0"/>
+            <GradientStop Color="#12101A" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CardBrush.DisabledHover" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#221C30" Offset="0"/>
+            <GradientStop Color="#171321" Offset="1"/>
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="CardBrush.Pressed" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#140E22" Offset="0"/>
+            <GradientStop Color="#0D0916" Offset="1"/>
+        </LinearGradientBrush>
+    </UserControl.Resources>
+
+    <!-- Outer Interactive Card Surface with Tactile Scale Transform -->
+    <Border x:Name="CardBorder"
+            Background="{StaticResource CardBrush.Disabled}"
+            BorderBrush="#2D2342"
+            BorderThickness="1.2"
+            CornerRadius="11"
+            Padding="4,6,4,5"
+            RenderTransformOrigin="0.5,0.5"
+            SnapsToDevicePixels="True"
+            MouseEnter="OnMouseEnter"
+            MouseLeave="OnMouseLeave"
+            PreviewMouseLeftButtonDown="OnPreviewMouseLeftButtonDown"
+            PreviewMouseLeftButtonUp="OnPreviewMouseLeftButtonUp">
+
+        <Border.RenderTransform>
+            <ScaleTransform x:Name="CardScale" ScaleX="1.0" ScaleY="1.0"/>
+        </Border.RenderTransform>
+
+        <Border.Effect>
+            <DropShadowEffect x:Name="CardGlow"
+                              Color="{DynamicResource Color.Accent.PurpleLight}"
+                              BlurRadius="10"
+                              ShadowDepth="0"
+                              Opacity="0.0"/>
+        </Border.Effect>
+
+        <!-- Vertical Flow: Centered Icon -> Control Name -> Tiny Status Badge -->
+        <Grid HorizontalAlignment="Stretch" VerticalAlignment="Center">
+            <Grid.RowDefinitions>
+                <!-- Row 0: Centered Icon -->
+                <RowDefinition Height="22"/>
+                <!-- Row 1: Short Control Name -->
+                <RowDefinition Height="Auto"/>
+                <!-- Row 2: Tiny Status Indicator Badge -->
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1. Centered Vector Icon Container -->
+            <Grid Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Width="22" Height="20">
+                <!-- Icon Canvas A: Microphone -->
+                <Canvas x:Name="IconMicrophone" Width="20" Height="20" Visibility="Collapsed">
+                    <!-- Mic Capsule -->
+                    <Rectangle x:Name="MicCapsule" Canvas.Left="7.5" Canvas.Top="1.5" Width="5" Height="9.5" RadiusX="2.5" RadiusY="2.5"
+                               Fill="#2A1B46" Stroke="#A855F7" StrokeThickness="1.3"/>
+                    <!-- Mic Stand & Cup -->
+                    <Path x:Name="MicStand" Data="M5,7.5 A5,5 0 0,0 15,7.5 M10,12.5 L10,16.5 M7,16.5 L13,16.5"
+                          Stroke="#A855F7" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <!-- Mute Slash Line -->
+                    <Line x:Name="MicSlash" X1="3" Y1="2" X2="17" Y2="17"
+                          Stroke="#EF4444" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="Collapsed"/>
+                </Canvas>
+
+                <!-- Icon Canvas B: Wi-Fi -->
+                <Canvas x:Name="IconWiFi" Width="20" Height="20" Visibility="Collapsed">
+                    <!-- Outer arc -->
+                    <Path x:Name="WiFiWave3" Data="M2,3.5 A11,11 0 0,1 18,3.5"
+                          Stroke="#C084FC" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <!-- Middle arc -->
+                    <Path x:Name="WiFiWave2" Data="M5,7 A7,7 0 0,1 15,7"
+                          Stroke="#A855F7" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <!-- Inner arc -->
+                    <Path x:Name="WiFiWave1" Data="M7.5,10.5 A3.5,3.5 0 0,1 12.5,10.5"
+                          Stroke="#8A2BE2" StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <!-- Center Base Dot -->
+                    <Ellipse x:Name="WiFiDot" Canvas.Left="8.75" Canvas.Top="14" Width="2.5" Height="2.5" Fill="#F8FAFC"/>
+                    <!-- Diagonal Slash Line -->
+                    <Line x:Name="WiFiSlash" X1="2" Y1="2" X2="18" Y2="17"
+                          Stroke="#EF4444" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="Collapsed"/>
+                </Canvas>
+
+                <!-- Icon Canvas C: Bluetooth -->
+                <Canvas x:Name="IconBluetooth" Width="20" Height="20" Visibility="Collapsed">
+                    <!-- Bluetooth Rune -->
+                    <Path x:Name="BluetoothRune"
+                          Data="M7,1 L13,5.5 L9,9 L13,12.5 L7,17 M7,1 L7,17 M7,5.5 L12,9 L7,12.5"
+                          Stroke="#C084FC" StrokeThickness="1.4"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                    <!-- Diagonal Slash Line -->
+                    <Line x:Name="BluetoothSlash" X1="3" Y1="2" X2="17" Y2="16"
+                          Stroke="#EF4444" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="Collapsed"/>
+                </Canvas>
+
+                <!-- Icon Canvas D: System Volume -->
+                <Canvas x:Name="IconSystemVolume" Width="20" Height="20" Visibility="Collapsed">
+                    <!-- Speaker Cone -->
+                    <Path x:Name="VolumeCone"
+                          Data="M2,6 L5,6 L9,3 L9,15 L5,12 L2,12 Z"
+                          Fill="#2A1B46" Stroke="#A855F7" StrokeThickness="1.3" StrokeLineJoin="Round"/>
+                    <!-- Sound Wave Arcs -->
+                    <Path x:Name="VolumeWave1" Data="M12,6.5 A3.5,3.5 0 0,1 12,11.5"
+                          Stroke="#C084FC" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <Path x:Name="VolumeWave2" Data="M14.5,4 A6.5,6.5 0 0,1 14.5,14"
+                          Stroke="#A855F7" StrokeThickness="1.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    <!-- Mute Cross X -->
+                    <Path x:Name="VolumeMuteCross" Data="M12,7 L16,11 M16,7 L12,11"
+                          Stroke="#EF4444" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                          Visibility="Collapsed"/>
+                </Canvas>
+
+                <!-- Icon Canvas E: Settings -->
+                <Canvas x:Name="IconSettings" Width="20" Height="20" Visibility="Collapsed">
+                    <Path x:Name="SettingsGearGlyph"
+                          Data="M9,1.5 L11,1.5 L11.3,3.3 C11.8,3.5 12.2,3.7 12.6,4 L14.3,3.1 L15.5,4.3 L14.6,6 C14.9,6.4 15.1,6.8 15.3,7.3 L17.1,7.6 L17.1,9.4 L15.3,9.7 C15.1,10.2 14.9,10.6 14.6,11 L15.5,12.7 L14.3,13.9 L12.6,13 C12.2,13.3 11.8,13.5 11.3,13.7 L11,15.5 L9,15.5 L8.7,13.7 C8.2,13.5 7.8,13.3 7.4,13 L5.7,13.9 L4.5,12.7 L5.4,11 C5.1,10.6 4.9,10.2 4.7,9.7 L2.9,9.4 L2.9,7.6 L4.7,7.3 C4.9,6.8 5.1,6.4 5.4,6 L4.5,4.3 L5.7,3.1 L7.4,4 C7.8,3.7 8.2,3.5 8.7,3.3 Z M10,6 A2.5,2.5 0 1,0 10,11 A2.5,2.5 0 1,0 10,6 Z"
+                          Fill="{DynamicResource Brush.Accent.PurpleLight}"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"/>
+                </Canvas>
+            </Grid>
+
+            <!-- 2. Short Control Name Beneath Icon -->
+            <TextBlock x:Name="TxtControlName"
+                       Grid.Row="1"
+                       HorizontalAlignment="Center"
+                       FontFamily="{DynamicResource Font.Main}"
+                       FontSize="10"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource Brush.Text.Primary}"
+                       Margin="0,3,0,2.5"
+                       TextTrimming="CharacterEllipsis"/>
+
+            <!-- 3. Status Area Beneath Name -->
+            <!-- 3A. Tiny Status Indicator Badge (Used for Microphone & Volume) -->
+            <Border x:Name="BadgeStatus"
+                    Grid.Row="2"
+                    HorizontalAlignment="Center"
+                    CornerRadius="4"
+                    Padding="5,1"
+                    Background="#1E172B"
+                    BorderBrush="#3D295F"
+                    BorderThickness="1">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="DotStatus" Width="3.5" Height="3.5" Fill="#64748B" Margin="0,0,3,0"/>
+                    <TextBlock x:Name="TxtStatus"
+                               Text="OFF"
+                               FontFamily="{DynamicResource Font.Main}"
+                               FontSize="8"
+                               FontWeight="Bold"
+                               Foreground="#64748B"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 3B. Centered Device Info Label (Used for Wi-Fi SSID & Bluetooth Devices) -->
+            <TextBlock x:Name="TxtDeviceInfo"
+                       Grid.Row="2"
+                       HorizontalAlignment="Center"
+                       TextAlignment="Center"
+                       FontFamily="{DynamicResource Font.Main}"
+                       FontSize="8"
+                       FontWeight="Medium"
+                       Foreground="{DynamicResource Brush.Accent.PurpleLight}"
+                       TextTrimming="CharacterEllipsis"
+                       MaxWidth="66"
+                       Visibility="Collapsed"/>
+        </Grid>
+    </Border>
+</UserControl>

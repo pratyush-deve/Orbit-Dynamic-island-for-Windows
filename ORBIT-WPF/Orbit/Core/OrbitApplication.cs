@@ -2,6 +2,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Orbit.Integrations.Desktop;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.DevWorkspace;
+using Orbit.Services.SystemControls;
 
 namespace Orbit.Core;
 
@@ -43,10 +45,16 @@ public sealed class OrbitApplication : IDisposable
         // 3. Application Lifecycle
         services.AddSingleton<IWindowLifecycleService, WindowLifecycleService>();
 
-        // 4. Integrations
+        // 4. Integrations & Controls
         services.AddSingleton<IWindowManager, WindowManager>();
+        services.AddSingleton<ISystemControlsService, SystemControlsService>();
 
-        // 5. Windows
+        // 5. Developer Workspace
+        services.AddSingleton<IIconExtractorService, IconExtractorService>();
+        services.AddSingleton<IAppDiscoveryService, AppDiscoveryService>();
+        services.AddSingleton<IDevWorkspaceService, DevWorkspaceService>();
+
+        // 6. Windows
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();
@@ -68,6 +76,8 @@ public sealed class OrbitApplication : IDisposable
             _serviceProvider.GetService<ISystemTrayService>()?.Dispose();
             _serviceProvider.GetService<IGlobalHotkeyService>()?.Dispose();
             _serviceProvider.GetService<IWindowManager>()?.Dispose();
+            _serviceProvider.GetService<ISystemControlsService>()?.Dispose();
+            _serviceProvider.GetService<IDevWorkspaceService>()?.Dispose();
             _serviceProvider.Dispose();
         }
         catch (Exception ex)
