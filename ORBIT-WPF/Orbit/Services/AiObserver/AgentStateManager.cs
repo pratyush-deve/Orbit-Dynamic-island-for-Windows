@@ -230,35 +230,48 @@ public sealed class AgentStateManager : IAgentStateManager
             isAcknowledged = _acknowledgedCompletions.Contains(summary.ConversationId);
         }
 
+        bool isRunning = string.Equals(summary.Status, "CASCADE_RUN_STATUS_RUNNING", StringComparison.OrdinalIgnoreCase) || summary.NotFullyIdle;
+        bool isIdle = string.Equals(summary.Status, "CASCADE_RUN_STATUS_IDLE", StringComparison.OrdinalIgnoreCase);
+        bool isRecent = (DateTime.UtcNow - summary.LastModifiedTime).TotalMinutes < 5.0;
+
         if (summary.Killed)
         {
             session.State = AgentState.Cancelled;
             session.StatusMessage = "Cancelled";
         }
-        else if (transcript.HasError)
+        else if (isRunning)
         {
-            session.State = AgentState.Error;
-            session.StatusMessage = transcript.ErrorMessage ?? "Error encountered";
-        }
-        else if (transcript.IsWaitingForApproval)
-        {
-            session.State = AgentState.Attention;
-            session.StatusMessage = "Waiting for input";
-        }
-        else if (string.Equals(summary.Status, "CASCADE_RUN_STATUS_RUNNING", StringComparison.OrdinalIgnoreCase) || summary.NotFullyIdle)
-        {
-            session.State = AgentState.Working;
-            session.StatusMessage = !string.IsNullOrWhiteSpace(transcript.LatestActivity) ? transcript.LatestActivity : "Processing task...";
             // Clear acknowledged state when a new run begins
             lock (_lock)
             {
                 _acknowledgedCompletions.Remove(summary.ConversationId);
             }
+
+            if (transcript.IsWaitingForApproval)
+            {
+                session.State = AgentState.Attention;
+                session.StatusMessage = "Waiting for input";
+            }
+            else
+            {
+                session.State = AgentState.Working;
+                session.StatusMessage = !string.IsNullOrWhiteSpace(transcript.LatestActivity) ? transcript.LatestActivity : "Processing task...";
+            }
         }
-        else if (string.Equals(summary.Status, "CASCADE_RUN_STATUS_IDLE", StringComparison.OrdinalIgnoreCase))
+        else if (transcript.IsWaitingForApproval && !isAcknowledged)
+        {
+            session.State = AgentState.Attention;
+            session.StatusMessage = "Waiting for input";
+        }
+        else if (transcript.HasError && isRecent && !isAcknowledged)
+        {
+            session.State = AgentState.Error;
+            session.StatusMessage = transcript.ErrorMessage ?? "Error encountered";
+        }
+        else if (isIdle)
         {
             // If recently completed and not yet acknowledged by user
-            if (!isAcknowledged && (DateTime.UtcNow - summary.LastModifiedTime).TotalMinutes < 5.0)
+            if (!isAcknowledged && isRecent)
             {
                 session.State = AgentState.Completed; // DONE
                 session.StatusMessage = "Task completed";

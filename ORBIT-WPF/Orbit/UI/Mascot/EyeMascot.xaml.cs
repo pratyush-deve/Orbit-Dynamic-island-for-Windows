@@ -25,6 +25,15 @@ public partial class EyeMascot : UserControl
     private static readonly System.Windows.Media.SolidColorBrush BrushCompletedBorder = new(ColorCompleted);
     private static readonly System.Windows.Media.SolidColorBrush BrushAttentionBorder = new(ColorAttention);
 
+    // Expressions for ORBIT Mascot's tiny expressive mouth
+    private static readonly System.Windows.Media.Geometry GeometryMouthIdle = System.Windows.Media.Geometry.Parse("M 0,0 Q 5,2.5 10,0");
+    private static readonly System.Windows.Media.Geometry GeometryMouthWorking = System.Windows.Media.Geometry.Parse("M 0.5,1.2 L 9.5,1.2");
+    private static readonly System.Windows.Media.Geometry GeometryMouthError = System.Windows.Media.Geometry.Parse("M 0,2.5 Q 5,0.2 10,2.5");
+    private static readonly System.Windows.Media.Geometry GeometryMouthAttention = System.Windows.Media.Geometry.Parse("M 0,2 L 2.5,0.5 L 5,2.5 L 7.5,0.5 L 10,2");
+    private static readonly System.Windows.Media.Geometry GeometryMouthCompleted = System.Windows.Media.Geometry.Parse("M 0,0 Q 5.5,4 11,0");
+
+    private Orbit.Models.AgentState _currentMouthState = Orbit.Models.AgentState.Idle;
+
     private DispatcherTimer? _donePersistenceTimer;
     private int _doneTimerToken = 0;
     private bool _isHoldingDoneState = false;
@@ -57,6 +66,10 @@ public partial class EyeMascot : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        if (MouthPath != null && MouthPath.Data == null)
+        {
+            MouthPath.Data = GeometryMouthIdle;
+        }
         StartAnimations();
     }
 
@@ -426,8 +439,72 @@ public partial class EyeMascot : UserControl
         _isHoldingDoneState = false;
     }
 
+    /// <summary>
+    /// Smoothly transitions ORBIT Mascot's tiny expressive mouth between AgentState expressions.
+    /// </summary>
+    private void SetMouthExpression(Orbit.Models.AgentState state)
+    {
+        if (MouthPath == null) return;
+
+        var targetGeometry = state switch
+        {
+            Orbit.Models.AgentState.Working => GeometryMouthWorking,
+            Orbit.Models.AgentState.Completed => GeometryMouthCompleted,
+            Orbit.Models.AgentState.Attention => GeometryMouthAttention,
+            Orbit.Models.AgentState.Error => GeometryMouthError,
+            _ => GeometryMouthIdle
+        };
+
+        if (_currentMouthState == state && MouthPath.Data != null)
+        {
+            return;
+        }
+
+        _currentMouthState = state;
+
+        if (!IsLoaded || MouthPath.Data == null)
+        {
+            MouthPath.Data = targetGeometry;
+            return;
+        }
+
+        // Smooth subtle fade/scale transition
+        var fadeOut = new DoubleAnimation(0.2, TimeSpan.FromMilliseconds(90))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+        var scaleOut = new DoubleAnimation(0.85, TimeSpan.FromMilliseconds(90))
+        {
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        fadeOut.Completed += (s, e) =>
+        {
+            MouthPath.Data = targetGeometry;
+
+            var fadeIn = new DoubleAnimation(0.85, TimeSpan.FromMilliseconds(130))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            var scaleIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(130))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            MouthPath.BeginAnimation(OpacityProperty, fadeIn);
+            MouthScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleIn);
+            MouthScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleIn);
+        };
+
+        MouthPath.BeginAnimation(OpacityProperty, fadeOut);
+        MouthScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleOut);
+        MouthScale.BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty, scaleOut);
+    }
+
     private void ApplyVisualState(Orbit.Models.AgentState state)
     {
+        SetMouthExpression(state);
+
         if (PillGlow == null) return;
 
         var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };

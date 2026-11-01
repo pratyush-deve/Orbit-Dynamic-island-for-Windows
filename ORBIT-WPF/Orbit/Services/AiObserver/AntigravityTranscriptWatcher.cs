@@ -118,6 +118,12 @@ public sealed class AntigravityTranscriptWatcher : IAntigravityTranscriptWatcher
                     snapshot.ErrorMessage = errContent.Length > 120 ? errContent.Substring(0, 120) + "..." : errContent;
                 }
             }
+            else if (string.Equals(status, "DONE", StringComparison.OrdinalIgnoreCase))
+            {
+                // Successful execution of a subsequent step or planner response clears prior intermediate tool errors
+                snapshot.HasError = false;
+                snapshot.ErrorMessage = null;
+            }
 
             // 1. Explicit user prompt (Never read internal reasoning)
             if (string.Equals(source, "USER_EXPLICIT", StringComparison.OrdinalIgnoreCase) &&

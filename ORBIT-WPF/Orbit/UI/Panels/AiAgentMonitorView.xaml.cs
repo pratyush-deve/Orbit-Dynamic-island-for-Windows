@@ -228,6 +228,15 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
             stateBadge.BorderThickness = new Thickness(1);
             cardBorder.BorderBrush = _brushAttentionBorder;
         }
+        else if (session.State == AgentState.Error)
+        {
+            stateText.Text = "ERROR";
+            stateText.Foreground = _brushAttentionFg;
+            stateBadge.Background = _brushAttentionBg;
+            stateBadge.BorderBrush = _brushAttentionBorder;
+            stateBadge.BorderThickness = new Thickness(1);
+            cardBorder.BorderBrush = _brushAttentionBorder;
+        }
         else
         {
             stateText.Text = "IDLE";

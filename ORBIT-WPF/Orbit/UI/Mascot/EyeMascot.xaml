@@ -26,88 +26,115 @@
                                   Opacity="0.5"/>
             </Border.Effect>
 
-            <!-- Mascot Face Surface -->
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                
-                <!-- Left Eye -->
-                <Grid Width="24" Height="28" Margin="0,0,12,0">
-                    <Grid.RenderTransform>
-                        <ScaleTransform x:Name="LeftEyeScale" CenterX="12" CenterY="14"/>
-                    </Grid.RenderTransform>
+            <!-- Mascot Face Surface (Eyes + Tiny Animated Mouth) -->
+            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <!-- Row 0: Eyes Row -->
+                    <RowDefinition Height="Auto"/>
+                    <!-- Row 1: Tiny Mouth -->
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <!-- Left Sclera -->
-                    <Border CornerRadius="12"
-                            Background="{DynamicResource Brush.Eye.Sclera}">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
-                        </Border.Effect>
+                <!-- Left & Right Eyes -->
+                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Left Eye -->
+                    <Grid Width="24" Height="28" Margin="0,0,12,0">
+                        <Grid.RenderTransform>
+                            <ScaleTransform x:Name="LeftEyeScale" CenterX="12" CenterY="14"/>
+                        </Grid.RenderTransform>
 
-                        <!-- Left Pupil Container (Clipped to Sclera) -->
-                        <Grid ClipToBounds="True">
-                            <Ellipse x:Name="LeftPupil"
-                                     Width="13" Height="15"
-                                     Fill="{DynamicResource Brush.Eye.Pupil}"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="LeftPupilTransform"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
+                        <!-- Left Sclera -->
+                        <Border CornerRadius="12"
+                                Background="{DynamicResource Brush.Eye.Sclera}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
+                            </Border.Effect>
 
-                            <!-- Left Specular Catchlight (Eye sparkle) -->
-                            <Ellipse Width="4" Height="4"
-                                     Fill="{DynamicResource Brush.Eye.Highlight}"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Margin="4,-4,0,0">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="LeftCatchlightTransform"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-                        </Grid>
-                    </Border>
-                </Grid>
+                            <!-- Left Pupil Container (Clipped to Sclera) -->
+                            <Grid ClipToBounds="True">
+                                <Ellipse x:Name="LeftPupil"
+                                         Width="13" Height="15"
+                                         Fill="{DynamicResource Brush.Eye.Pupil}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="LeftPupilTransform"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
 
-                <!-- Right Eye -->
-                <Grid Width="24" Height="28">
-                    <Grid.RenderTransform>
-                        <ScaleTransform x:Name="RightEyeScale" CenterX="12" CenterY="14"/>
-                    </Grid.RenderTransform>
+                                <!-- Left Specular Catchlight (Eye sparkle) -->
+                                <Ellipse Width="4" Height="4"
+                                         Fill="{DynamicResource Brush.Eye.Highlight}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Margin="4,-4,0,0">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="LeftCatchlightTransform"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
-                    <!-- Right Sclera -->
-                    <Border CornerRadius="12"
-                            Background="{DynamicResource Brush.Eye.Sclera}">
-                        <Border.Effect>
-                            <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
-                        </Border.Effect>
+                    <!-- Right Eye -->
+                    <Grid Width="24" Height="28">
+                        <Grid.RenderTransform>
+                            <ScaleTransform x:Name="RightEyeScale" CenterX="12" CenterY="14"/>
+                        </Grid.RenderTransform>
 
-                        <!-- Right Pupil Container (Clipped to Sclera) -->
-                        <Grid ClipToBounds="True">
-                            <Ellipse x:Name="RightPupil"
-                                     Width="13" Height="15"
-                                     Fill="{DynamicResource Brush.Eye.Pupil}"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="RightPupilTransform"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
+                        <!-- Right Sclera -->
+                        <Border CornerRadius="12"
+                                Background="{DynamicResource Brush.Eye.Sclera}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
+                            </Border.Effect>
 
-                            <!-- Right Specular Catchlight (Eye sparkle) -->
-                            <Ellipse Width="4" Height="4"
-                                     Fill="{DynamicResource Brush.Eye.Highlight}"
-                                     HorizontalAlignment="Center"
-                                     VerticalAlignment="Center"
-                                     Margin="4,-4,0,0">
-                                <Ellipse.RenderTransform>
-                                    <TranslateTransform x:Name="RightCatchlightTransform"/>
-                                </Ellipse.RenderTransform>
-                            </Ellipse>
-                        </Grid>
-                    </Border>
-                </Grid>
+                            <!-- Right Pupil Container (Clipped to Sclera) -->
+                            <Grid ClipToBounds="True">
+                                <Ellipse x:Name="RightPupil"
+                                         Width="13" Height="15"
+                                         Fill="{DynamicResource Brush.Eye.Pupil}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="RightPupilTransform"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
 
-            </StackPanel>
+                                <!-- Right Specular Catchlight (Eye sparkle) -->
+                                <Ellipse Width="4" Height="4"
+                                         Fill="{DynamicResource Brush.Eye.Highlight}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Margin="4,-4,0,0">
+                                    <Ellipse.RenderTransform>
+                                        <TranslateTransform x:Name="RightCatchlightTransform"/>
+                                    </Ellipse.RenderTransform>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <!-- Tiny Expressive Mouth -->
+                <Path x:Name="MouthPath"
+                      Grid.Row="1"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Stroke="#FFFFFF"
+                      StrokeThickness="1.2"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      StrokeLineJoin="Round"
+                      Margin="0,2,0,-2"
+                      Opacity="0.85"
+                      SnapsToDevicePixels="True"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Path.RenderTransform>
+                        <ScaleTransform x:Name="MouthScale" CenterX="5" CenterY="1" ScaleX="1.0" ScaleY="1.0"/>
+                    </Path.RenderTransform>
+                </Path>
+            </Grid>
         </Border>
 
         <!-- Tiny red circular exclamation badge (!) attached to top-right corner of mascot -->
