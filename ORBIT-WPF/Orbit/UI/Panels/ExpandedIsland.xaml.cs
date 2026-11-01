@@ -9,6 +9,7 @@ using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.Hubs;
+using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.UI.Mascot;
 
@@ -37,6 +38,10 @@ public partial class ExpandedIsland : UserControl
     public bool IsInManageSocialAppsView { get; private set; }
     public bool IsInWorkHubView { get; private set; }
     public bool IsInManageWorkAppsView { get; private set; }
+    public bool IsInNotesView { get; private set; }
+    public bool IsNotesModeActive => IsInNotesView;
+
+    public event Action<bool>? NotesModeChanged;
 
     private IAgentStateManager? _agentStateManager;
     private ISocialHubService? _socialHubService;
@@ -140,7 +145,8 @@ public partial class ExpandedIsland : UserControl
         IAgentStateManager? agentStateManager = null,
         IOrbitAttentionManager? attentionManager = null,
         ISocialHubService? socialHubService = null,
-        IWorkHubService? workHubService = null)
+        IWorkHubService? workHubService = null,
+        INotesService? notesService = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
         if (controlsService != null)
@@ -169,6 +175,7 @@ public partial class ExpandedIsland : UserControl
             WorkHubPanel.Initialize(workHubService);
             ManageWorkAppsPanel.Initialize(workHubService, "MANAGE WORK APPS", "WORK");
         }
+        NotesPanel.Initialize(notesService);
         if (attentionManager != null)
         {
             attentionManager.MascotStateChanged += (state, msg) =>
@@ -200,6 +207,12 @@ public partial class ExpandedIsland : UserControl
 
     public void ResetToHomeView()
     {
+        bool wasInNotes = IsInNotesView;
+        if (IsInNotesView)
+        {
+            NotesPanel.SaveCurrentNotesSynchronously();
+        }
+
         IsInActiveAppsView = false;
         IsInControlsView = false;
         IsInDevModeView = false;
@@ -209,6 +222,7 @@ public partial class ExpandedIsland : UserControl
         IsInManageSocialAppsView = false;
         IsInWorkHubView = false;
         IsInManageWorkAppsView = false;
+        IsInNotesView = false;
 
         ActiveAppsContainer.BeginAnimation(OpacityProperty, null);
         ActiveAppsContainer.Visibility = Visibility.Collapsed;
@@ -246,12 +260,21 @@ public partial class ExpandedIsland : UserControl
         ManageWorkAppsContainer.Visibility = Visibility.Collapsed;
         ManageWorkAppsContainer.Opacity = 0.0;
 
+        NotesContainer.BeginAnimation(OpacityProperty, null);
+        NotesContainer.Visibility = Visibility.Collapsed;
+        NotesContainer.Opacity = 0.0;
+
         HomeContentView.BeginAnimation(OpacityProperty, null);
         HomeContentView.Visibility = Visibility.Visible;
         HomeContentView.Opacity = 1.0;
 
         HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
         UpdateHomeCardsScrollProgress();
+
+        if (wasInNotes)
+        {
+            NotesModeChanged?.Invoke(false);
+        }
 
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
     }
@@ -978,8 +1001,103 @@ public partial class ExpandedIsland : UserControl
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            if (IsInNotesView)
+            {
+                OnNotesBackRequested();
+                return;
+            }
             CollapseRequested?.Invoke();
         }
+    }
+
+    private void OnNotesButtonClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (IsInNotesView)
+        {
+            OnNotesBackRequested();
+            return;
+        }
+
+        SwitchToNotesView();
+    }
+
+    public void SwitchToNotesView()
+    {
+        if (IsInNotesView) return;
+        OrbitLogger.Info(LogCategory, "Notes button clicked. Switching to Notes mode view.");
+
+        // Cleanly exit any active workspace or hub before entering Notes mode
+        if (IsInActiveAppsView || IsInControlsView || IsInDevModeView || IsInManageAppsView ||
+            IsInAiMonitorView || IsInSocialHubView || IsInManageSocialAppsView ||
+            IsInWorkHubView || IsInManageWorkAppsView)
+        {
+            ResetToHomeView();
+        }
+
+        IsInNotesView = true;
+        NotesModeChanged?.Invoke(true);
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+
+            NotesContainer.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                NotesContainer.BeginAnimation(OpacityProperty, null);
+                NotesContainer.Opacity = 1.0;
+            };
+            NotesContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnNotesBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in Notes view. Returning to Home.");
+
+        NotesPanel.SaveCurrentNotesSynchronously();
+        IsInNotesView = false;
+        NotesModeChanged?.Invoke(false);
+
+        // Reset to content-driven home expanded height
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            NotesContainer.BeginAnimation(OpacityProperty, null);
+            NotesContainer.Visibility = Visibility.Collapsed;
+            NotesContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        NotesContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     private void OnHideButtonClicked(object sender, RoutedEventArgs e)

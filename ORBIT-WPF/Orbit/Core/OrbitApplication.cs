@@ -5,6 +5,7 @@ using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.Hubs;
+using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 
 namespace Orbit.Core;
@@ -69,7 +70,10 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<IAgentStateManager, AgentStateManager>();
         services.AddSingleton<IOrbitAttentionManager, OrbitAttentionManager>();
 
-        // 8. Windows
+        // 8. Built-in Notes Service
+        services.AddSingleton<INotesService, NotesService>();
+
+        // 9. Windows
         services.AddSingleton<MainWindow>();
 
         _serviceProvider = services.BuildServiceProvider();

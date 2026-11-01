@@ -9,6 +9,7 @@ using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.Hubs;
+using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 
 namespace Orbit;
@@ -27,6 +28,8 @@ public partial class MainWindow : Window
     public const double CollapsedHeight = 56.0;
     public const double ExpandedWidth = 440.0;
     public const double ExpandedHeight = 266.0;
+    public const double NotesWidth = 500.0;
+    public const double NotesHeight = 380.0;
     public const double TopMargin = 14.0;
 
     private readonly IMonitorService _monitorService;
@@ -42,6 +45,7 @@ public partial class MainWindow : Window
     private readonly IOrbitAttentionManager? _attentionManager;
     private readonly ISocialHubService? _socialHubService;
     private readonly IWorkHubService? _workHubService;
+    private readonly INotesService? _notesService;
 
     private IntPtr _hwnd = IntPtr.Zero;
 
@@ -58,7 +62,8 @@ public partial class MainWindow : Window
         IAgentStateManager? agentStateManager = null,
         IOrbitAttentionManager? attentionManager = null,
         ISocialHubService? socialHubService = null,
-        IWorkHubService? workHubService = null)
+        IWorkHubService? workHubService = null,
+        INotesService? notesService = null)
     {
         InitializeComponent();
 
@@ -75,6 +80,7 @@ public partial class MainWindow : Window
         _attentionManager = attentionManager;
         _socialHubService = socialHubService;
         _workHubService = workHubService;
+        _notesService = notesService;
 
         // Wire lifecycle service events
         _lifecycleService.StateChanged += OnStateChanged;
@@ -105,8 +111,9 @@ public partial class MainWindow : Window
         IslandPanel.SetGlowStatus(glow);
 
         // Initialize active apps manager, system controls, dev workspace, AI agent monitor, social/work hubs, and responsive height changes
-        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService);
+        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService, _notesService);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
+        IslandPanel.NotesModeChanged += OnNotesModeChanged;
 
         if (_attentionManager != null)
         {
@@ -150,6 +157,7 @@ public partial class MainWindow : Window
     private void OnIslandDesiredHeightChanged(double targetHeight)
     {
         if (_lifecycleService.CurrentState != CompanionState.Expanded) return;
+        if (IslandPanel.IsNotesModeActive) return;
 
         var primary = _monitorService.GetPrimaryMonitor();
         double maxAvailable = Math.Max(200, primary.WorkArea.Height - Top - 20);
@@ -162,9 +170,49 @@ public partial class MainWindow : Window
         BeginAnimation(HeightProperty, anim);
     }
 
+    private void OnNotesModeChanged(bool isActive)
+    {
+        if (_lifecycleService.CurrentState != CompanionState.Expanded) return;
+
+        var primary = _monitorService.GetPrimaryMonitor();
+        double targetWidth = isActive ? NotesWidth : ExpandedWidth;
+        double targetHeight = isActive ? NotesHeight : IslandPanel.CalculateHomeDesiredHeight();
+
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, targetWidth, TopMargin);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        var duration = TimeSpan.FromMilliseconds(240);
+
+        var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+        var heightAnim = new DoubleAnimation(targetHeight, duration) { EasingFunction = ease };
+
+        widthAnim.Completed += (s, e) =>
+        {
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(LeftProperty, null);
+            BeginAnimation(HeightProperty, null);
+
+            Width = targetWidth;
+            Left = targetLeft;
+            Height = targetHeight;
+            _overlayService.ReapplyTopmost(_hwnd);
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+        BeginAnimation(HeightProperty, heightAnim);
+    }
+
     private void OnWindowDeactivated(object? sender, EventArgs e)
     {
         OrbitLogger.Debug(LogCategory, $"Window deactivated. CurrentState = {_lifecycleService.CurrentState}");
+
+        // CRITICAL: Do NOT collapse or exit if Notes mode is active!
+        if (IslandPanel.IsNotesModeActive)
+        {
+            _overlayService.ReapplyTopmost(_hwnd);
+            return;
+        }
 
         // Only collapse if currently EXPANDED
         // Do NOT collapse if Expanding, Collapsing, Collapsed, or Hidden!
