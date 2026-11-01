@@ -16,6 +16,21 @@ public partial class EyeMascot : UserControl
     private readonly DispatcherTimer _glanceTimer;
     private readonly Random _random = new();
 
+    private static readonly System.Windows.Media.Color ColorIdle = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+    private static readonly System.Windows.Media.Color ColorWorking = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
+    private static readonly System.Windows.Media.Color ColorCompleted = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
+    private static readonly System.Windows.Media.Color ColorAttention = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+
+    private static readonly System.Windows.Media.SolidColorBrush BrushWorkingBorder = new(ColorWorking);
+    private static readonly System.Windows.Media.SolidColorBrush BrushCompletedBorder = new(ColorCompleted);
+    private static readonly System.Windows.Media.SolidColorBrush BrushAttentionBorder = new(ColorAttention);
+
+    private DispatcherTimer? _donePersistenceTimer;
+    private int _doneTimerToken = 0;
+    private bool _isHoldingDoneState = false;
+    private bool _isDoneExpired = false;
+    private string? _lastCompletedMessage;
+
     private bool _isGlowEnabled = true;
     private bool _isTrackingCursor = false;
 
@@ -61,6 +76,7 @@ public partial class EyeMascot : UserControl
     {
         _blinkTimer.Stop();
         _glanceTimer.Stop();
+        CancelDoneHold();
     }
 
     public void SetGlowEnabled(bool enabled)
@@ -265,10 +281,14 @@ public partial class EyeMascot : UserControl
     {
         if (!_isGlowEnabled || PillGlow == null) return;
 
+        PillGlow.Color = ColorIdle;
+        PillGlow.BlurRadius = 16.0;
+        PillBorder?.SetResourceReference(Border.BorderBrushProperty, "Brush.Gradient.PillBorder");
+
         var glowAnimation = new DoubleAnimation
         {
-            From = 0.35,
-            To = 0.65,
+            From = 0.30,
+            To = 0.60,
             Duration = TimeSpan.FromSeconds(2.5),
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever,
@@ -280,6 +300,7 @@ public partial class EyeMascot : UserControl
 
     /// <summary>
     /// Updates the mascot eye and pill visual state according to real-time AI agent status.
+    /// Manages high-visibility Working and Completed glow effects with 15–20s DONE persistence.
     /// </summary>
     public void SetAiState(Orbit.Models.AgentState state, string message = "")
     {
@@ -321,63 +342,172 @@ public partial class EyeMascot : UserControl
             }
         }
 
-        // Mascot Glow & Indicator States
+        // Manage DONE (Completed) State Persistence & Transitions
+        if (state == Orbit.Models.AgentState.Working)
+        {
+            // Any new working task immediately cancels previous DONE persistence
+            CancelDoneHold();
+            _isDoneExpired = false;
+            _lastCompletedMessage = null;
+            ApplyVisualState(Orbit.Models.AgentState.Working);
+            return;
+        }
+
+        if (state == Orbit.Models.AgentState.Attention || state == Orbit.Models.AgentState.Error)
+        {
+            // Attention/Error cancels any DONE hold immediately
+            CancelDoneHold();
+            ApplyVisualState(state);
+            return;
+        }
+
+        if (state == Orbit.Models.AgentState.Completed)
+        {
+            // Avoid re-triggering if this specific completion already timed out into Idle
+            if (_isDoneExpired && _lastCompletedMessage == message)
+            {
+                ApplyVisualState(Orbit.Models.AgentState.Idle);
+                return;
+            }
+
+            _lastCompletedMessage = message;
+            _isDoneExpired = false;
+            _isHoldingDoneState = true;
+            StartDoneTimer();
+            ApplyVisualState(Orbit.Models.AgentState.Completed);
+            return;
+        }
+
+        // State is Idle (or Default)
+        if (_isHoldingDoneState)
+        {
+            // Keep green DONE indicator visible for the remainder of the 15-20s timeout
+            return;
+        }
+
+        CancelDoneHold();
+        ApplyVisualState(Orbit.Models.AgentState.Idle);
+    }
+
+    private void StartDoneTimer()
+    {
+        _donePersistenceTimer?.Stop();
+        int token = ++_doneTimerToken;
+
+        _donePersistenceTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(18) // ~18 seconds persistence (within 15–20s requirement)
+        };
+        _donePersistenceTimer.Tick += (s, e) =>
+        {
+            _donePersistenceTimer?.Stop();
+            _donePersistenceTimer = null;
+
+            // Stale timer verification
+            if (_doneTimerToken != token) return;
+
+            _isHoldingDoneState = false;
+            _isDoneExpired = true;
+
+            // Return to Idle state
+            ApplyVisualState(Orbit.Models.AgentState.Idle);
+        };
+        _donePersistenceTimer.Start();
+    }
+
+    private void CancelDoneHold()
+    {
+        _doneTimerToken++;
+        if (_donePersistenceTimer != null)
+        {
+            _donePersistenceTimer.Stop();
+            _donePersistenceTimer = null;
+        }
+        _isHoldingDoneState = false;
+    }
+
+    private void ApplyVisualState(Orbit.Models.AgentState state)
+    {
+        if (PillGlow == null) return;
+
+        var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
+
         switch (state)
         {
             case Orbit.Models.AgentState.Working:
-                // WORKING: Subtle neon purple activity glow
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
-                var workAnim = new DoubleAnimation
-                {
-                    From = 0.45,
-                    To = 0.85,
-                    Duration = TimeSpan.FromSeconds(1.4),
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = colorEase
-                };
-                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
-                break;
+                // WORKING (#C084FC): High-intensity neon purple pulse, large blur halo, border illuminated
+                PillGlow.Color = ColorWorking;
+                PillGlow.BlurRadius = 26.0;
+                PillBorder?.SetValue(Border.BorderBrushProperty, BrushWorkingBorder);
 
-            case Orbit.Models.AgentState.Attention:
-                // ATTENTION: Red/Amber accent accompanied by the tiny red exclamation badge
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
-                var attnAnim = new DoubleAnimation
+                if (_isGlowEnabled)
                 {
-                    From = 0.50,
-                    To = 0.85,
-                    Duration = TimeSpan.FromSeconds(1.0),
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = colorEase
-                };
-                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
+                    var workAnim = new DoubleAnimation
+                    {
+                        From = 0.65,
+                        To = 1.0,
+                        Duration = TimeSpan.FromSeconds(1.3),
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
+                }
                 break;
 
             case Orbit.Models.AgentState.Completed:
-                // DONE: Emerald green completion indicator
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
-                var doneAnim = new DoubleAnimation
+                // DONE (#10B981): Commanding emerald green glow, high opacity, large blur halo
+                PillGlow.Color = ColorCompleted;
+                PillGlow.BlurRadius = 28.0;
+                PillBorder?.SetValue(Border.BorderBrushProperty, BrushCompletedBorder);
+
+                if (_isGlowEnabled)
                 {
-                    From = 0.55,
-                    To = 0.90,
-                    Duration = TimeSpan.FromSeconds(1.8),
-                    AutoReverse = true,
-                    RepeatBehavior = RepeatBehavior.Forever,
-                    EasingFunction = colorEase
-                };
-                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
+                    var doneAnim = new DoubleAnimation
+                    {
+                        From = 0.70,
+                        To = 1.0,
+                        Duration = TimeSpan.FromSeconds(1.5),
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
+                }
+                break;
+
+            case Orbit.Models.AgentState.Attention:
+                // ATTENTION (#EF4444): Red indicator
+                PillGlow.Color = ColorAttention;
+                PillGlow.BlurRadius = 20.0;
+                PillBorder?.SetValue(Border.BorderBrushProperty, BrushAttentionBorder);
+
+                if (_isGlowEnabled)
+                {
+                    var attnAnim = new DoubleAnimation
+                    {
+                        From = 0.50,
+                        To = 0.85,
+                        Duration = TimeSpan.FromSeconds(1.0),
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
+                }
                 break;
 
             case Orbit.Models.AgentState.Error:
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+                // ERROR (#EF4444): Red indicator
+                PillGlow.Color = ColorAttention;
+                PillGlow.BlurRadius = 20.0;
+                PillBorder?.SetValue(Border.BorderBrushProperty, BrushAttentionBorder);
                 PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
-                PillGlow.Opacity = 0.80;
+                PillGlow.Opacity = _isGlowEnabled ? 0.85 : 0.0;
                 break;
 
             default:
-                // IDLE: Neutral appearance
-                PillGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+                // IDLE (#A855F7): Subtle breathing purple glow
                 StartIdleGlow();
                 break;
         }

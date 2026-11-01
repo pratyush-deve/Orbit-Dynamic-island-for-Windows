@@ -73,7 +73,73 @@
                                     <Setter TargetName="GlyphActivity" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
                                     <Setter TargetName="BtnBorder" Property="Effect">
                                         <Setter.Value>
-                                            <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                            <DropShadowEffect Color="#C084FC"
+                                                              BlurRadius="8"
+                                                              ShadowDepth="0"
+                                                              Opacity="0.6"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#1C1032"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleGlow}"/>
+                                    <Setter TargetName="BtnBorder" Property="RenderTransform">
+                                        <Setter.Value>
+                                            <ScaleTransform ScaleX="0.94" ScaleY="0.94"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!-- Top-Left File Explorer Shortcut Button -->
+                <Button x:Name="BtnFileExplorer"
+                        Grid.Row="0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
+                        Width="26"
+                        Height="22"
+                        Margin="33,2,0,0"
+                        ToolTip="Open File Explorer"
+                        Cursor="Hand"
+                        Click="OnFileExplorerClicked">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="BtnBorder"
+                                    Background="#221C30"
+                                    BorderBrush="#3D295F"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    RenderTransformOrigin="0.5,0.5">
+                                <Border.RenderTransform>
+                                    <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                                </Border.RenderTransform>
+
+                                <!-- Minimal Folder / File Explorer Icon -->
+                                <Path x:Name="GlyphFolder"
+                                      Data="M2,13 L2,4.5 C2,3.7 2.7,3 3.5,3 L5.8,3 C6.4,3 7,3.3 7.4,3.8 L8.4,5 L12.5,5 C13.3,5 14,5.7 14,6.5 L14,13 C14,13.8 13.3,14.5 12.5,14.5 L3.5,14.5 C2.7,14.5 2,13.8 2,13 Z"
+                                      Width="13"
+                                      Height="11"
+                                      Stretch="Uniform"
+                                      Stroke="{DynamicResource Brush.Text.Muted}"
+                                      StrokeThickness="1.3"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"/>
+                            </Border>
+
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="BtnBorder" Property="Background" Value="#352458"/>
+                                    <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                    <Setter TargetName="GlyphFolder" Property="Stroke" Value="{DynamicResource Brush.Accent.PurpleLight}"/>
+                                    <Setter TargetName="BtnBorder" Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect Color="#C084FC"
                                                               BlurRadius="8"
                                                               ShadowDepth="0"
                                                               Opacity="0.6"/>
@@ -143,7 +209,7 @@
                                     <Setter TargetName="BtnText" Property="Foreground" Value="{DynamicResource Brush.Text.Primary}"/>
                                     <Setter TargetName="BtnBorder" Property="Effect">
                                         <Setter.Value>
-                                            <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+                                            <DropShadowEffect Color="#C084FC"
                                                               BlurRadius="8"
                                                               ShadowDepth="0"
                                                               Opacity="0.6"/>
@@ -182,6 +248,8 @@
                             <!-- Row 0: Header Branding: ORBIT + v2.0 + Subtitle -->
                             <RowDefinition Height="Auto"/>
                             <!-- Row 1: Horizontally Scrollable Interactive Navigation Cards Row -->
+                            <RowDefinition Height="Auto"/>
+                            <!-- Row 2: Subtle Horizontal Scroll Progress Indicator -->
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
@@ -235,6 +303,7 @@
                                       Background="Transparent"
                                       BorderThickness="0"
                                       Padding="0"
+                                      ScrollChanged="OnHomeCardsScrollChanged"
                                       PreviewMouseWheel="OnHomeCardsScrollViewerPreviewMouseWheel">
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,4,2,8">
                                 <!-- Card 1: Dev Mode -->
@@ -497,6 +566,37 @@
                                 </components:NavigationCard>
                             </StackPanel>
                         </ScrollViewer>
+
+                        <!-- Row 2: Subtle Horizontal Scroll Progress Indicator (2.5px) -->
+                        <Border x:Name="HomeCardsScrollTrack"
+                                Grid.Row="2"
+                                Width="120"
+                                Height="2.5"
+                                Background="#221538"
+                                BorderBrush="#3E2368"
+                                BorderThickness="0.8"
+                                CornerRadius="1.25"
+                                HorizontalAlignment="Center"
+                                Margin="0,0,0,4"
+                                SnapsToDevicePixels="True"
+                                IsHitTestVisible="False">
+                            <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                <Border x:Name="HomeCardsScrollThumb"
+                                        Height="2.5"
+                                        Width="36"
+                                        HorizontalAlignment="Left"
+                                        Background="#A855F7"
+                                        CornerRadius="1.25"
+                                        SnapsToDevicePixels="True">
+                                    <Border.RenderTransform>
+                                        <TranslateTransform x:Name="HomeCardsScrollThumbTransform" X="0"/>
+                                    </Border.RenderTransform>
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.45"/>
+                                    </Border.Effect>
+                                </Border>
+                            </Grid>
+                        </Border>
                     </Grid>
 
                     <!-- View B: Active Apps Manager View -->

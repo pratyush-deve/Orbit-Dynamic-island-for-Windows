@@ -43,6 +43,7 @@ public partial class ExpandedIsland : UserControl
     private IWorkHubService? _workHubService;
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
+    private DateTime _lastFileExplorerLaunch = DateTime.MinValue;
 
     public ExpandedIsland()
     {
@@ -250,6 +251,7 @@ public partial class ExpandedIsland : UserControl
         HomeContentView.Opacity = 1.0;
 
         HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
+        UpdateHomeCardsScrollProgress();
 
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
     }
@@ -659,6 +661,37 @@ public partial class ExpandedIsland : UserControl
         }
     }
 
+    private void OnHomeCardsScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateHomeCardsScrollProgress();
+    }
+
+    private void UpdateHomeCardsScrollProgress()
+    {
+        if (HomeCardsScrollViewer == null || HomeCardsScrollTrack == null || HomeCardsScrollThumb == null || HomeCardsScrollThumbTransform == null) return;
+
+        double scrollable = HomeCardsScrollViewer.ScrollableWidth;
+        double extent = HomeCardsScrollViewer.ExtentWidth;
+        double viewport = HomeCardsScrollViewer.ViewportWidth;
+
+        if (scrollable <= 0 || extent <= viewport)
+        {
+            HomeCardsScrollTrack.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        HomeCardsScrollTrack.Visibility = Visibility.Visible;
+
+        double trackWidth = HomeCardsScrollTrack.ActualWidth > 0 ? HomeCardsScrollTrack.ActualWidth : 120.0;
+        double viewportRatio = Math.Clamp(viewport / extent, 0.15, 0.85);
+        double thumbWidth = Math.Max(24.0, trackWidth * viewportRatio);
+        double scrollRatio = Math.Clamp(HomeCardsScrollViewer.HorizontalOffset / scrollable, 0.0, 1.0);
+        double thumbOffset = scrollRatio * (trackWidth - thumbWidth);
+
+        HomeCardsScrollThumb.Width = thumbWidth;
+        HomeCardsScrollThumbTransform.X = thumbOffset;
+    }
+
     private void OnCardSocialClicked(object sender, RoutedEventArgs e)
     {
         if (e?.RoutedEvent != null)
@@ -981,6 +1014,34 @@ public partial class ExpandedIsland : UserControl
         catch (Exception ex)
         {
             OrbitLogger.Error(LogCategory, "Failed to launch Windows Task Manager.", ex);
+        }
+    }
+
+    private void OnFileExplorerClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (DateTime.UtcNow - _lastFileExplorerLaunch < TimeSpan.FromSeconds(1.5))
+        {
+            OrbitLogger.Debug(LogCategory, "Ignored duplicate File Explorer launch request (cooldown active).");
+            return;
+        }
+
+        _lastFileExplorerLaunch = DateTime.UtcNow;
+
+        try
+        {
+            OrbitLogger.Info(LogCategory, "Launching native Windows File Explorer...");
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                UseShellExecute = true
+            };
+            Process.Start(startInfo);
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Error(LogCategory, "Failed to launch Windows File Explorer.", ex);
         }
     }
 }

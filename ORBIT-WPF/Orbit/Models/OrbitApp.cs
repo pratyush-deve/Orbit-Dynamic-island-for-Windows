@@ -45,7 +45,7 @@ public class OrbitApp : INotifyPropertyChanged
     public string? Arguments { get; init; }
     public string? WorkingDirectory { get; init; }
     public string? ProcessName { get; init; }
-    public string? IconPath { get; init; }
+    public string? IconPath { get; set; }
     public string? PackageId { get; init; }
     public string? WebUrl { get; init; }
 

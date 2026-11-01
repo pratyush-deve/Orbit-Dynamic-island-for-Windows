@@ -207,6 +207,15 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
                     }
                     else
                     {
+                        if (app.Id == "whatsapp")
+                        {
+                            string? waLogo = FindUserWhatsAppLogo();
+                            if (!string.IsNullOrWhiteSpace(waLogo) && File.Exists(waLogo))
+                            {
+                                app.IconPath = waLogo;
+                            }
+                        }
+
                         string pathToIcon = !string.IsNullOrWhiteSpace(app.IconPath) ? app.IconPath : app.ExecutablePath;
                         if (!string.IsNullOrWhiteSpace(pathToIcon) && File.Exists(pathToIcon))
                         {
@@ -214,6 +223,8 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
                         }
                     }
                 }
+
+                OrbitLogger.Info(LogCategory, $"App '{app.Name}' (ID: {app.Id}): IconPath='{app.IconPath}', IconLoaded={app.Icon != null}");
             }
 
             // 8. Order results logically
@@ -520,7 +531,13 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
                     k.StartsWith(known.PackageFamilyName!, StringComparison.OrdinalIgnoreCase)).ToList();
 
                 string? exeTarget = null;
+                string? iconTarget = null;
                 string? displayName = null;
+
+                if (known.Id.Equals("whatsapp", StringComparison.OrdinalIgnoreCase))
+                {
+                    iconTarget = FindUserWhatsAppLogo();
+                }
 
                 foreach (var pkgName in matchingPackages)
                 {
@@ -538,6 +555,11 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
 
                         if (!string.IsNullOrWhiteSpace(root))
                         {
+                            if (string.IsNullOrWhiteSpace(iconTarget))
+                            {
+                                iconTarget = FindPackageAssetIcon(root);
+                            }
+
                             foreach (var exe in known.ExecutableMatches)
                             {
                                 string candidate = Path.Combine(root, exe);
@@ -549,7 +571,7 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
                             }
                         }
 
-                        if (exeTarget != null) break;
+                        if (exeTarget != null && !string.IsNullOrWhiteSpace(iconTarget)) break;
                     }
                     catch { }
                 }
@@ -574,7 +596,7 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
                         ExecutablePath = $"shell:AppsFolder\\{aumid}",
                         Arguments = null,
                         ProcessName = known.ProcessName,
-                        IconPath = exeTarget,
+                        IconPath = iconTarget ?? exeTarget,
                         PackageId = aumid,
                         IsInstalled = true
                     };
@@ -950,6 +972,98 @@ public sealed class AppDiscoveryService : IAppDiscoveryService
         var image = new DrawingImage(group);
         image.Freeze();
         return image;
+    }
+
+    /// <summary>
+    /// Searches for custom user-supplied WhatsApp logo files (e.g. in Saved Pictures or Pictures).
+    /// </summary>
+    private static string? FindUserWhatsAppLogo()
+    {
+        try
+        {
+            // 1. Check user's Saved Pictures folder dynamically via SpecialFolder
+            string myPictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            if (!string.IsNullOrWhiteSpace(myPictures) && Directory.Exists(myPictures))
+            {
+                string savedPicLogo = Path.Combine(myPictures, "Saved Pictures", "whatsapp logo.png");
+                if (File.Exists(savedPicLogo)) return savedPicLogo;
+
+                string savedPicAlt = Path.Combine(myPictures, "Saved Pictures", "whatsapp.png");
+                if (File.Exists(savedPicAlt)) return savedPicAlt;
+
+                string picLogo = Path.Combine(myPictures, "whatsapp logo.png");
+                if (File.Exists(picLogo)) return picLogo;
+            }
+
+            // 2. Check localized OneDrive paths and common directories
+            string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            string[] candidateDirs = [
+                Path.Combine(userProfile, "OneDrive", "사진", "Saved Pictures"),
+                Path.Combine(userProfile, "OneDrive", "Pictures", "Saved Pictures"),
+                Path.Combine(userProfile, "Pictures", "Saved Pictures")
+            ];
+
+            foreach (var dir in candidateDirs)
+            {
+                if (Directory.Exists(dir))
+                {
+                    string file1 = Path.Combine(dir, "whatsapp logo.png");
+                    if (File.Exists(file1)) return file1;
+                    string file2 = Path.Combine(dir, "whatsapp.png");
+                    if (File.Exists(file2)) return file2;
+                }
+            }
+        }
+        catch { }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Locates the official application logo PNG inside a WindowsApps package root folder.
+    /// </summary>
+    private static string? FindPackageAssetIcon(string packageRoot)
+    {
+        try
+        {
+            string assetsDir = Path.Combine(packageRoot, "Assets");
+            if (Directory.Exists(assetsDir))
+            {
+                string[] preferredNames = [
+                    "AppList.targetsize-256.png",
+                    "AppList.targetsize-96.png",
+                    "AppList.targetsize-64.png",
+                    "AppList.targetsize-48.png",
+                    "AppList.scale-200.png",
+                    "AppList.png",
+                    "StoreLogo.scale-200.png",
+                    "StoreLogo.png",
+                    "Logo.png",
+                    "Square150x150Logo.scale-200.png",
+                    "Square44x44Logo.targetsize-256.png",
+                    "Square44x44Logo.targetsize-48.png"
+                ];
+
+                foreach (var name in preferredNames)
+                {
+                    string candidate = Path.Combine(assetsDir, name);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+
+                // Fallback to largest AppList*.png
+                var anyAppList = Directory.GetFiles(assetsDir, "AppList*.png");
+                if (anyAppList.Length > 0)
+                {
+                    return anyAppList.OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
+                }
+            }
+        }
+        catch { }
+
+        return null;
     }
 
     #endregion

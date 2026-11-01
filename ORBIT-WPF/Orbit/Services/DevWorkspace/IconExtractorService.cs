@@ -56,6 +56,30 @@ public sealed class IconExtractorService : IIconExtractorService
                 return null;
             }
 
+            // 0. Direct image file (.png, .ico, .jpg, .jpeg, .bmp)
+            if (path.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".ico", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".bmp", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var bitmap = new BitmapImage();
+                    bitmap.BeginInit();
+                    bitmap.UriSource = new Uri(path, UriKind.Absolute);
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                    bitmap.EndInit();
+                    bitmap.Freeze();
+                    return bitmap;
+                }
+                catch (Exception ex)
+                {
+                    OrbitLogger.Debug(LogCategory, $"Failed to load image directly for '{path}': {ex.Message}");
+                }
+            }
+
             // 1. Primary: Native Windows Shell SHGetFileInfo for large icon
             var shinfo = new NativeMethods.SHFILEINFO();
             IntPtr result = NativeMethods.SHGetFileInfo(
