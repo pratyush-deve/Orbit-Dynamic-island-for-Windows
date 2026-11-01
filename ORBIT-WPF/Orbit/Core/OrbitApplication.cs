@@ -45,8 +45,9 @@ public sealed class OrbitApplication : IDisposable
             services.AddSingleton<ISingleInstanceService, SingleInstanceService>();
         }
 
-        // 3. Application Lifecycle
+        // 3. Application Lifecycle & Startup Registration
         services.AddSingleton<IWindowLifecycleService, WindowLifecycleService>();
+        services.AddSingleton<IStartupRegistrationService, StartupRegistrationService>();
 
         // 4. Integrations & Controls
         services.AddSingleton<IWindowManager, WindowManager>();

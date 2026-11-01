@@ -1,3 +1,6 @@
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
 using Orbit.Core;
@@ -13,10 +16,14 @@ public partial class App : Application
 {
     private const string LogCategory = "APP";
     private OrbitApplication? _orbitApp;
+    private CancellationTokenSource? _startupDelayCts;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Keep application alive during async delay and across window hides
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
         // 1. Initialize logging
         OrbitLogger.Initialize();
@@ -38,14 +45,54 @@ public partial class App : Application
             return;
         }
 
-        // 4. Initialize Orbit Application Container with the primary single instance service
+        // 4. Check for automatic startup mode and apply 10-second asynchronous startup delay
+        bool isAutoStart = e.Args.Any(a => string.Equals(a, "--autostart", StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(a, "-autostart", StringComparison.OrdinalIgnoreCase) ||
+                                           string.Equals(a, "/autostart", StringComparison.OrdinalIgnoreCase));
+
+        if (isAutoStart)
+        {
+            OrbitLogger.Info(LogCategory, "Launched via Windows automatic startup (--autostart). Initiating 10-second asynchronous startup delay.");
+            _startupDelayCts = new CancellationTokenSource();
+
+            Action cancelDelayAction = () => _startupDelayCts?.Cancel();
+            singleInstanceService.RestoreRequested += cancelDelayAction;
+            singleInstanceService.StartListening();
+
+            try
+            {
+                await Task.Delay(10000, _startupDelayCts.Token);
+                OrbitLogger.Info(LogCategory, "10-second startup delay completed successfully. Proceeding with initialization.");
+            }
+            catch (TaskCanceledException)
+            {
+                OrbitLogger.Info(LogCategory, "Startup delay canceled by user launch request. Proceeding immediately.");
+            }
+            finally
+            {
+                singleInstanceService.RestoreRequested -= cancelDelayAction;
+            }
+        }
+
+        // 5. Initialize Orbit Application Container with the primary single instance service
         _orbitApp = new OrbitApplication(singleInstanceService);
+
+        // Ensure automatic startup registration is up-to-date with the release executable
+        try
+        {
+            var startupRegService = _orbitApp.GetService<IStartupRegistrationService>();
+            startupRegService.EnsureRegistered();
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Startup registration check encountered an issue: {ex.Message}");
+        }
 
         var lifecycleService = _orbitApp.GetService<IWindowLifecycleService>();
         var trayService = _orbitApp.GetService<ISystemTrayService>();
         var mainWindow = _orbitApp.GetService<MainWindow>();
 
-        // 5. Connect IPC restore requests
+        // 6. Connect IPC restore requests
         singleInstanceService.RestoreRequested += () =>
         {
             Dispatcher.Invoke(() =>
@@ -62,16 +109,20 @@ public partial class App : Application
                 }
             });
         };
-        singleInstanceService.StartListening();
 
-        // 6. Initialize System Tray
+        if (!isAutoStart)
+        {
+            singleInstanceService.StartListening();
+        }
+
+        // 7. Initialize System Tray
         trayService.Initialize(
             onShowRequested: () => Dispatcher.Invoke(lifecycleService.Show),
             onHideRequested: () => Dispatcher.Invoke(lifecycleService.Hide),
             onResetPositionRequested: () => Dispatcher.Invoke(lifecycleService.ResetPosition),
             onExitRequested: () => Dispatcher.Invoke(lifecycleService.RequestExit));
 
-        // 7. Wire application lifecycle exit
+        // 8. Wire application lifecycle exit
         lifecycleService.ExitRequested += () =>
         {
             Dispatcher.Invoke(() =>
@@ -81,7 +132,7 @@ public partial class App : Application
             });
         };
 
-        // 8. Launch Companion Window
+        // 9. Launch Companion Window
         MainWindow = mainWindow;
         mainWindow.Show();
 
