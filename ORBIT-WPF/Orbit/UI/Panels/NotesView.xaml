@@ -33,7 +33,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Back to Dashboard"
                     Cursor="Hand"
                     Click="OnBackClicked">
                 <Button.Template>
@@ -140,7 +139,6 @@
                         Height="24"
                         Margin="0,0,6,0"
                         VerticalAlignment="Center"
-                        ToolTip="Export Notes (Save As...)"
                         Cursor="Hand"
                         Click="OnExportClicked">
                     <Button.Template>
@@ -202,7 +200,6 @@
                         Width="24"
                         Height="24"
                         VerticalAlignment="Center"
-                        ToolTip="Clear Notes (Paintbrush)"
                         Cursor="Hand"
                         Click="OnClearClicked">
                     <Button.Template>

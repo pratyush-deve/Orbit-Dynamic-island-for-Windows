@@ -110,7 +110,6 @@
                         Margin="0,0,1,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
-                        ToolTip="Close Window"
                         Cursor="Hand"
                         Click="OnCloseClicked">
                     <Button.Template>

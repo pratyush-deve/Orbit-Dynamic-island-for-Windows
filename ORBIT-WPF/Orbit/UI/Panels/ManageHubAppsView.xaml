@@ -34,7 +34,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Back"
                     Cursor="Hand"
                     Click="OnBackClicked">
                 <Button.Template>
@@ -121,7 +120,6 @@
                         Height="24"
                         Margin="0,0,6,0"
                         VerticalAlignment="Center"
-                        ToolTip="Search applications"
                         Cursor="Hand"
                         Click="OnToggleSearchClicked">
                     <Button.Template>
@@ -171,7 +169,6 @@
                         Width="24"
                         Height="24"
                         VerticalAlignment="Center"
-                        ToolTip="Rescan for installed apps"
                         Cursor="Hand"
                         Click="OnRefreshClicked">
                     <Button.Template>

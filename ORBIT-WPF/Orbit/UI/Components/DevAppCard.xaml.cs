@@ -74,12 +74,10 @@ public partial class DevAppCard : UserControl
             ImgAppIcon.Source = null;
             ImgAppIcon.Visibility = Visibility.Collapsed;
             FallbackIcon.Visibility = Visibility.Collapsed;
-            ToolTip = null;
             return;
         }
 
         TxtAppName.Text = App.Name;
-        ToolTip = $"{App.Name}\n{App.ExecutablePath}";
 
         if (App.Icon != null)
         {

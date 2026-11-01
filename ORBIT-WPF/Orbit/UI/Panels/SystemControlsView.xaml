@@ -32,7 +32,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Back to Dashboard"
                     Cursor="Hand"
                     Click="OnBackClicked">
                 <Button.Template>
@@ -116,7 +115,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Refresh Control States"
                     Cursor="Hand"
                     Click="OnRefreshClicked">
                 <Button.Template>

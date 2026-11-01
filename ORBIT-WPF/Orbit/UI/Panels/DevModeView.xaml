@@ -34,7 +34,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Back to Dashboard"
                     Cursor="Hand"
                     Click="OnBackClicked">
                 <Button.Template>
@@ -118,7 +117,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Manage Developer Apps"
                     Cursor="Hand"
                     Click="OnManageAppsClicked">
                 <Button.Template>

@@ -33,7 +33,6 @@
               VerticalAlignment="Stretch"
               Background="Transparent"
               Cursor="Hand"
-              ToolTip="Click to expand ORBIT"
               MouseLeftButtonDown="OnMascotClick">
             
             <mascot:EyeMascot x:Name="PillMascot"

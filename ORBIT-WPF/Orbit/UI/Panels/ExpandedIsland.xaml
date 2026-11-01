@@ -39,7 +39,6 @@
                         Width="26"
                         Height="22"
                         Margin="2,2,0,0"
-                        ToolTip="Open Task Manager"
                         Cursor="Hand"
                         Click="OnTaskManagerClicked">
                     <Button.Template>
@@ -102,7 +101,6 @@
                         Width="26"
                         Height="22"
                         Margin="33,2,0,0"
-                        ToolTip="Open File Explorer"
                         Cursor="Hand"
                         Click="OnFileExplorerClicked">
                     <Button.Template>
@@ -166,7 +164,6 @@
                                   HorizontalAlignment="Center"
                                   Margin="0,0,0,6"
                                   Cursor="Hand"
-                                  ToolTip="Click to collapse"
                                   MouseLeftButtonDown="OnMascotClicked"/>
 
                 <!-- Top-Right Tiny Text Hide Button (Hides to system tray) -->
@@ -176,7 +173,6 @@
                         VerticalAlignment="Top"
                         Height="22"
                         Margin="0,2,2,0"
-                        ToolTip="Hide ORBIT to system tray"
                         Cursor="Hand"
                         Click="OnHideButtonClicked">
                     <Button.Template>
@@ -297,7 +293,6 @@
                                     VerticalAlignment="Center"
                                     Height="32"
                                     Margin="0,0,4,0"
-                                    ToolTip="Open Quick Notes"
                                     Cursor="Hand"
                                     Click="OnNotesButtonClicked">
                                 <Button.Template>
@@ -399,7 +394,6 @@
                                                            Margin="0,0,10,0"
                                                            CardBadge="DEV"
                                                            CardLabel="Dev Mode"
-                                                           ToolTip="Developer Workspace"
                                                            Click="OnCardDevModeClicked">
                                     <Border Background="#23173B"
                                             BorderBrush="#532692"
@@ -425,7 +419,6 @@
                                                            Margin="0,0,10,0"
                                                            CardBadge="APPS"
                                                            CardLabel="Active Apps"
-                                                           ToolTip="Active Applications"
                                                            Click="OnCardActiveAppsClicked">
                                     <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <!-- Back Application Window Layer -->
@@ -473,7 +466,6 @@
                                                            Margin="0,0,10,0"
                                                            CardBadge="AI"
                                                            CardLabel="AI Agent"
-                                                           ToolTip="AI Agent Monitor"
                                                            Click="OnCardAiAgentClicked">
                                     <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <!-- Primary 4-point AI neural sparkle -->
@@ -508,7 +500,6 @@
                                                            Margin="0,0,10,0"
                                                            CardBadge="CTRL"
                                                            CardLabel="Controls"
-                                                           ToolTip="Quick Controls"
                                                            Click="OnCardControlsClicked">
                                     <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <Grid.RowDefinitions>
@@ -567,7 +558,6 @@
                                                            Margin="0,0,10,0"
                                                            CardBadge="SOCIAL"
                                                            CardLabel="Social Hub"
-                                                           ToolTip="Social Hub"
                                                            Click="OnCardSocialClicked">
                                     <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <Canvas Width="24" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -614,7 +604,6 @@
                                                            Margin="0,0,0,0"
                                                            CardBadge="WORK"
                                                            CardLabel="Productivity"
-                                                           ToolTip="Productivity"
                                                            Click="OnCardWorkClicked">
                                     <Grid Width="28" Height="24" VerticalAlignment="Center" HorizontalAlignment="Center">
                                         <Canvas Width="24" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">

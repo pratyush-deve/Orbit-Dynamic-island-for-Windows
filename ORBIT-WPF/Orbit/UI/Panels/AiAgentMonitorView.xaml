@@ -89,8 +89,7 @@
         <Grid Grid.Row="0" Margin="0,0,0,8">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Style="{StaticResource AiBackBtnStyle}"
-                        Click="OnBackClicked"
-                        ToolTip="Return to Dashboard">
+                        Click="OnBackClicked">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="←" FontWeight="Bold" Margin="0,0,4,0" Foreground="#C084FC"/>
                         <TextBlock Text="Back" FontSize="10.5" FontWeight="SemiBold"/>

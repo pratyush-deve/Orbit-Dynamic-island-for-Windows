@@ -75,7 +75,6 @@ public partial class ApplicationCard : UserControl
         {
             TxtAppName.Text = string.Empty;
             TxtTitle.Text = string.Empty;
-            ToolTip = null;
             ImgIcon.Source = null;
             ImgIcon.Visibility = Visibility.Collapsed;
             FallbackIcon.Visibility = Visibility.Visible;
@@ -84,7 +83,6 @@ public partial class ApplicationCard : UserControl
 
         TxtAppName.Text = string.IsNullOrWhiteSpace(info.AppName) ? info.ProcessName : info.AppName;
         TxtTitle.Text = info.Title;
-        ToolTip = $"{info.AppName}\n{info.Title}";
 
         if (info.Icon != null)
         {

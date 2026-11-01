@@ -32,7 +32,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Back to Dashboard"
                     Cursor="Hand"
                     Click="OnBackClicked">
                 <Button.Template>
@@ -102,8 +101,7 @@
                         CornerRadius="6"
                         Padding="6,1"
                         Margin="8,0,0,0"
-                        VerticalAlignment="Center"
-                        ToolTip="PRODUCTIVITY">
+                        VerticalAlignment="Center">
                     <TextBlock Text="WORK"
                                FontSize="9"
                                FontWeight="Bold"
@@ -117,7 +115,6 @@
                     Width="24"
                     Height="24"
                     VerticalAlignment="Center"
-                    ToolTip="Manage Work Apps"
                     Cursor="Hand"
                     Click="OnManageAppsClicked">
                 <Button.Template>

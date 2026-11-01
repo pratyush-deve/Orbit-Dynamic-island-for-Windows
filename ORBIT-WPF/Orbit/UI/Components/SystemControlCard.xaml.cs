@@ -129,7 +129,6 @@ public partial class SystemControlCard : UserControl
         };
         CardGlow.BeginAnimation(DropShadowEffect.OpacityProperty, glowAnim);
 
-        ToolTip = "Open Windows Settings";
         SettingsGearGlyph.Fill = _purpleAccent;
     }
 
@@ -159,7 +158,6 @@ public partial class SystemControlCard : UserControl
                 TxtDeviceInfo.Visibility = Visibility.Visible;
                 TxtDeviceInfo.Text = "Unavailable";
                 TxtDeviceInfo.Foreground = _dimGrey;
-                TxtDeviceInfo.ToolTip = status.Detail ?? "Device unavailable";
             }
             else
             {
@@ -170,15 +168,9 @@ public partial class SystemControlCard : UserControl
                 TxtStatus.Text = "N/A";
             }
 
-            ToolTip = status.Detail ?? "Device unavailable";
             ApplyIconMuteVisuals(false, isUnavailable: true);
             return;
         }
-
-        string tooltipText = !string.IsNullOrWhiteSpace(status.Detail)
-            ? $"{TxtControlName.Text}: {status.Detail} - Click to toggle"
-            : $"{TxtControlName.Text} ({status.StatusLabel}) - Click to toggle";
-        ToolTip = tooltipText;
 
         if (_isEnabled)
         {
@@ -196,7 +188,6 @@ public partial class SystemControlCard : UserControl
                 BadgeStatus.Visibility = Visibility.Collapsed;
                 TxtDeviceInfo.Visibility = Visibility.Visible;
                 TxtDeviceInfo.Text = status.StatusLabel;
-                TxtDeviceInfo.ToolTip = status.Detail ?? status.StatusLabel;
 
                 bool isConnected = !status.StatusLabel.Equals("Not Connected", StringComparison.OrdinalIgnoreCase) &&
                                    !status.StatusLabel.Equals("No Devices", StringComparison.OrdinalIgnoreCase) &&
@@ -234,7 +225,6 @@ public partial class SystemControlCard : UserControl
                 BadgeStatus.Visibility = Visibility.Collapsed;
                 TxtDeviceInfo.Visibility = Visibility.Visible;
                 TxtDeviceInfo.Text = status.StatusLabel;
-                TxtDeviceInfo.ToolTip = status.Detail ?? status.StatusLabel;
                 TxtDeviceInfo.Foreground = _mutedGrey;
                 TxtDeviceInfo.FontWeight = FontWeights.Normal;
             }
