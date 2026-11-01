@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\ORBIT.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <PlatformTarget>x64</PlatformTarget>
@@ -19,6 +20,11 @@
     <Company>ORBIT</Company>
     <Description>ORBIT 2.0 Native Windows Desktop Companion</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\ORBIT.ico" />
+    <Resource Include="Assets\ORBIT.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />

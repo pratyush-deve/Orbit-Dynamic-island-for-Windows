@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Windows.Forms;
 using Orbit.Core;
 
@@ -35,7 +36,7 @@ public sealed class SystemTrayService : ISystemTrayService
     {
         try
         {
-            _generatedIcon = CreateOrbitIcon();
+            _generatedIcon = GetOrbitTrayIcon();
 
             _contextMenu = new ContextMenuStrip();
             _contextMenu.RenderMode = ToolStripRenderMode.System;
@@ -82,6 +83,40 @@ public sealed class SystemTrayService : ISystemTrayService
     public void ShowBalloon(string title, string text, ToolTipIcon icon = ToolTipIcon.Info)
     {
         _notifyIcon?.ShowBalloonTip(3000, title, text, icon);
+    }
+
+    /// <summary>
+    /// Loads the custom multi-resolution ORBIT icon from embedded resources or executable with programmatic fallback.
+    /// </summary>
+    private static Icon GetOrbitTrayIcon()
+    {
+        try
+        {
+            var uri = new Uri("pack://application:,,,/Assets/ORBIT.ico", UriKind.Absolute);
+            var streamInfo = System.Windows.Application.GetResourceStream(uri);
+            if (streamInfo != null)
+            {
+                using var stream = streamInfo.Stream;
+                return new Icon(stream, new System.Drawing.Size(32, 32));
+            }
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Failed to load ORBIT.ico from resources: {ex.Message}");
+        }
+
+        try
+        {
+            var procPath = Environment.ProcessPath;
+            if (!string.IsNullOrEmpty(procPath) && File.Exists(procPath))
+            {
+                var icon = Icon.ExtractAssociatedIcon(procPath);
+                if (icon != null) return icon;
+            }
+        }
+        catch { }
+
+        return CreateOrbitIcon();
     }
 
     /// <summary>

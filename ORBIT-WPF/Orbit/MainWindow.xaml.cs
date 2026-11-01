@@ -98,6 +98,16 @@ public partial class MainWindow : Window
         OrbitLogger.Info(LogCategory, $"HWND initialized: 0x{_hwnd:X}");
 
         _overlayService.InitializeWindowHandle(_hwnd);
+
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/Assets/ORBIT.png", UriKind.Absolute);
+            Icon = System.Windows.Media.Imaging.BitmapFrame.Create(iconUri);
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Could not assign window icon: {ex.Message}");
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
