@@ -176,7 +176,7 @@ public partial class MainWindow : Window
 
         var primary = _monitorService.GetPrimaryMonitor();
         double targetWidth = isActive ? NotesWidth : ExpandedWidth;
-        double targetHeight = isActive ? NotesHeight : IslandPanel.CalculateHomeDesiredHeight();
+        double targetHeight = isActive ? NotesHeight : ExpandedHeight;
 
         var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, targetWidth, TopMargin);
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
@@ -188,13 +188,15 @@ public partial class MainWindow : Window
 
         widthAnim.Completed += (s, e) =>
         {
+            // Assign target values before detaching animations to prevent base-value snap-back
+            Width = targetWidth;
+            Left = targetLeft;
+            Height = targetHeight;
+
             BeginAnimation(WidthProperty, null);
             BeginAnimation(LeftProperty, null);
             BeginAnimation(HeightProperty, null);
 
-            Width = targetWidth;
-            Left = targetLeft;
-            Height = targetHeight;
             _overlayService.ReapplyTopmost(_hwnd);
         };
 

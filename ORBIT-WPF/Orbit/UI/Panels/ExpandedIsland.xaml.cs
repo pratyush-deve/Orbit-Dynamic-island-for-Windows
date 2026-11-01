@@ -275,8 +275,10 @@ public partial class ExpandedIsland : UserControl
         {
             NotesModeChanged?.Invoke(false);
         }
-
-        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+        else
+        {
+            DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+        }
     }
 
     private void OnActiveAppsDismissAndCollapseRequested()
@@ -639,36 +641,11 @@ public partial class ExpandedIsland : UserControl
     }
 
     /// <summary>
-    /// Calculates the dynamic content-driven height required for the Home view,
-    /// measuring the actual rendered visual tree (mascot, branding, cards carousel, framing).
+    /// Calculates the standard height required for the Home view (Mascot header + cards carousel).
     /// </summary>
     public double CalculateHomeDesiredHeight()
     {
-        try
-        {
-            var previousVisibility = HomeContentView.Visibility;
-            HomeContentView.Visibility = Visibility.Visible;
-
-            // Measure RootIsland against the standard expanded width (440 DIPs) with unconstrained vertical space
-            RootIsland.Measure(new System.Windows.Size(MainWindow.ExpandedWidth, double.PositiveInfinity));
-            double measuredHeight = RootIsland.DesiredSize.Height;
-
-            HomeContentView.Visibility = previousVisibility;
-
-            if (measuredHeight > 150)
-            {
-                // Round up with a 4-DIP subpixel breathing buffer
-                return Math.Max(264.0, Math.Ceiling(measuredHeight + 4.0));
-            }
-        }
-        catch (Exception ex)
-        {
-            OrbitLogger.Warn(LogCategory, $"Failed to measure home content height: {ex.Message}");
-        }
-
-        // Reliable calculated fallback based on measured visual hierarchy:
-        // Framing & margins (40) + Mascot (57) + Branding (54) + Card Row (106) + Padding = 266 DIPs
-        return 266.0;
+        return MainWindow.ExpandedHeight;
     }
 
     private void OnHomeCardsScrollViewerPreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -1069,12 +1046,18 @@ public partial class ExpandedIsland : UserControl
 
         NotesPanel.SaveCurrentNotesSynchronously();
         IsInNotesView = false;
+
+        // Ensure Home view is visible and reset scroll before transition begins
+        HomeContentView.Visibility = Visibility.Visible;
+        HomeContentView.Opacity = 0.0;
+        HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
+        UpdateHomeCardsScrollProgress();
+        HomeContentView.InvalidateMeasure();
+
+        // Immediately notify window to animate back to normal Home dimensions (440x266)
         NotesModeChanged?.Invoke(false);
 
-        // Reset to content-driven home expanded height
-        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
-
-        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(160))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
@@ -1083,21 +1066,19 @@ public partial class ExpandedIsland : UserControl
             NotesContainer.BeginAnimation(OpacityProperty, null);
             NotesContainer.Visibility = Visibility.Collapsed;
             NotesContainer.Opacity = 0.0;
-
-            HomeContentView.Visibility = Visibility.Visible;
-
-            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
-            {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            fadeIn.Completed += (s2, ev2) =>
-            {
-                HomeContentView.BeginAnimation(OpacityProperty, null);
-                HomeContentView.Opacity = 1.0;
-            };
-            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
         };
         NotesContainer.BeginAnimation(OpacityProperty, fadeOut);
+
+        var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeIn.Completed += (s2, ev2) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Opacity = 1.0;
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
     }
 
     private void OnHideButtonClicked(object sender, RoutedEventArgs e)

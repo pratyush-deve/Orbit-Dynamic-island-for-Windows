@@ -28,7 +28,7 @@
                     <!-- Row 0: Eyes Mascot (clicking collapses) -->
                     <RowDefinition Height="Auto"/>
                     <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
                 <!-- Top-Left Task Manager Shortcut Button -->
@@ -762,8 +762,11 @@
                     <Grid x:Name="NotesContainer"
                           Visibility="Collapsed"
                           Opacity="0.0"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch">
                         <panels:NotesView x:Name="NotesPanel"
+                                          HorizontalAlignment="Stretch"
+                                          VerticalAlignment="Stretch"
                                           BackRequested="OnNotesBackRequested"/>
                     </Grid>
                 </Grid>

@@ -47,6 +47,7 @@ public partial class NotesView : UserControl, IDisposable
         _autoSaveTimer.Tick += OnAutoSaveTimerTick;
 
         TxtEditor.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler(OnEditorScrollChanged));
+        SizeChanged += (s, e) => UpdateScrollIndicator();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -123,6 +124,8 @@ public partial class NotesView : UserControl, IDisposable
 
         _autoSaveTimer.Stop();
         _autoSaveTimer.Start();
+
+        UpdateScrollIndicator();
     }
 
     private void OnAutoSaveTimerTick(object? sender, EventArgs e)
@@ -208,17 +211,63 @@ public partial class NotesView : UserControl, IDisposable
         }
     }
 
+    private ScrollViewer? _editorScrollViewer;
+
+    private ScrollViewer? GetEditorScrollViewer()
+    {
+        if (_editorScrollViewer != null) return _editorScrollViewer;
+        _editorScrollViewer = FindVisualChild<ScrollViewer>(TxtEditor);
+        return _editorScrollViewer;
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typed) return typed;
+            var desc = FindVisualChild<T>(child);
+            if (desc != null) return desc;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Handles mouse-wheel and touchpad vertical scrolling smoothly.
+    /// Operates even when the editor has keyboard focus and preserves caret/selection.
+    /// </summary>
+    private void OnEditorPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        var sv = GetEditorScrollViewer();
+        if (sv != null && sv.ScrollableHeight > 0)
+        {
+            // Smooth scrolling for both discrete mouse wheel notches (e.g. delta +/-120 -> 42 DIPs)
+            // and continuous fine touchpad scrolling deltas (e.g. delta 10-20 -> 3.5-7 DIPs)
+            double scrollDelta = -e.Delta * 0.35;
+            double targetOffset = Math.Clamp(sv.VerticalOffset + scrollDelta, 0.0, sv.ScrollableHeight);
+            sv.ScrollToVerticalOffset(targetOffset);
+            e.Handled = true;
+        }
+    }
+
     /// <summary>
     /// Dynamically updates the subtle vertical scroll progress thumb as the user scrolls.
     /// </summary>
     private void OnEditorScrollChanged(object sender, ScrollChangedEventArgs e)
     {
-        double extent = e.ExtentHeight;
-        double viewport = e.ViewportHeight;
-        double offset = e.VerticalOffset;
+        UpdateScrollIndicator(e.ExtentHeight, e.ViewportHeight, e.VerticalOffset);
+    }
+
+    private void UpdateScrollIndicator(double? extentOpt = null, double? viewportOpt = null, double? offsetOpt = null)
+    {
+        var sv = GetEditorScrollViewer();
+        double extent = extentOpt ?? sv?.ExtentHeight ?? 0;
+        double viewport = viewportOpt ?? sv?.ViewportHeight ?? 0;
+        double offset = offsetOpt ?? sv?.VerticalOffset ?? 0;
         double trackHeight = NotesScrollTrack.ActualHeight;
 
-        if (trackHeight <= 0 || extent <= viewport || extent <= 0)
+        // Subdue or hide when there is no overflow
+        if (trackHeight <= 0 || extent <= viewport || extent <= 0 || (extent - viewport) < 1.0)
         {
             NotesScrollTrack.Visibility = Visibility.Collapsed;
             return;
@@ -226,8 +275,8 @@ public partial class NotesView : UserControl, IDisposable
 
         NotesScrollTrack.Visibility = Visibility.Visible;
 
-        // Dynamic thumb sizing proportional to visible content
-        double thumbHeight = Math.Max(18.0, Math.Min(trackHeight, (viewport / extent) * trackHeight));
+        // Dynamic thumb sizing proportional to visible content ratio (minimum 20 DIPs)
+        double thumbHeight = Math.Max(20.0, Math.Min(trackHeight, (viewport / extent) * trackHeight));
         NotesScrollThumb.Height = thumbHeight;
 
         // Dynamic vertical translation proportional to scroll offset
