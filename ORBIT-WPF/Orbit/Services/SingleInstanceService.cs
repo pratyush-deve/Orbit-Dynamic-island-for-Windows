@@ -9,7 +9,8 @@ public interface ISingleInstanceService : IDisposable
 {
     bool IsFirstInstance { get; }
     event Action? RestoreRequested;
-    bool NotifyExistingInstance();
+    event Action? ToggleRequested;
+    bool NotifyExistingInstance(string command = "TOGGLE");
     void StartListening();
 }
 
@@ -29,6 +30,7 @@ public sealed class SingleInstanceService : ISingleInstanceService
 
     public bool IsFirstInstance => _isFirstInstance;
     public event Action? RestoreRequested;
+    public event Action? ToggleRequested;
 
     public SingleInstanceService()
     {
@@ -44,16 +46,16 @@ public sealed class SingleInstanceService : ISingleInstanceService
         }
     }
 
-    public bool NotifyExistingInstance()
+    public bool NotifyExistingInstance(string command = "TOGGLE")
     {
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             client.Connect(2000); // 2 second timeout
             using var writer = new StreamWriter(client, Encoding.UTF8);
-            writer.WriteLine("RESTORE");
+            writer.WriteLine(command);
             writer.Flush();
-            OrbitLogger.Info(LogCategory, "Notified primary instance via named pipe.");
+            OrbitLogger.Info(LogCategory, $"Notified primary instance via named pipe with '{command}'.");
             return true;
         }
         catch (Exception ex)
@@ -92,9 +94,19 @@ public sealed class SingleInstanceService : ISingleInstanceService
                 var message = await reader.ReadLineAsync(token);
                 OrbitLogger.Info(LogCategory, $"Received IPC message from secondary launch: '{message}'");
 
-                if (message == "RESTORE" || message == "SHOW")
+                if (string.Equals(message, "TOGGLE", StringComparison.OrdinalIgnoreCase))
+                {
+                    ToggleRequested?.Invoke();
+                }
+                else if (string.Equals(message, "RESTORE", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(message, "SHOW", StringComparison.OrdinalIgnoreCase))
                 {
                     RestoreRequested?.Invoke();
+                }
+                else
+                {
+                    // Default to toggle for unknown or general secondary launches
+                    ToggleRequested?.Invoke();
                 }
             }
             catch (OperationCanceledException)

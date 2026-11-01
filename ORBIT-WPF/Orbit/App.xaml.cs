@@ -39,7 +39,7 @@ public partial class App : Application
         if (!singleInstanceService.IsFirstInstance)
         {
             OrbitLogger.Info(LogCategory, "Secondary launch detected. Signaling running instance and terminating.");
-            singleInstanceService.NotifyExistingInstance();
+            singleInstanceService.NotifyExistingInstance("TOGGLE");
             singleInstanceService.Dispose();
             Shutdown(0);
             return;
@@ -57,6 +57,7 @@ public partial class App : Application
 
             Action cancelDelayAction = () => _startupDelayCts?.Cancel();
             singleInstanceService.RestoreRequested += cancelDelayAction;
+            singleInstanceService.ToggleRequested += cancelDelayAction;
             singleInstanceService.StartListening();
 
             try
@@ -71,6 +72,7 @@ public partial class App : Application
             finally
             {
                 singleInstanceService.RestoreRequested -= cancelDelayAction;
+                singleInstanceService.ToggleRequested -= cancelDelayAction;
             }
         }
 
@@ -92,7 +94,16 @@ public partial class App : Application
         var trayService = _orbitApp.GetService<ISystemTrayService>();
         var mainWindow = _orbitApp.GetService<MainWindow>();
 
-        // 6. Connect IPC restore requests
+        // 6. Connect IPC toggle and restore requests
+        singleInstanceService.ToggleRequested += () =>
+        {
+            Dispatcher.Invoke(() =>
+            {
+                OrbitLogger.Info(LogCategory, "IPC toggle requested by secondary launch.");
+                mainWindow.HandleToggleRequest();
+            });
+        };
+
         singleInstanceService.RestoreRequested += () =>
         {
             Dispatcher.Invoke(() =>

@@ -226,6 +226,49 @@ public partial class MainWindow : Window
         }
     }
 
+    private DateTime _lastToggleRequestTime = DateTime.MinValue;
+
+    /// <summary>
+    /// Handles an IPC toggle request from a secondary launch (e.g. HP Programmable Key).
+    /// Alternates visibility between hidden and visible on screen (matching the mascot Hide button).
+    /// </summary>
+    public void HandleToggleRequest()
+    {
+        // Debounce rapid keyboard key bounces (150ms)
+        if (DateTime.UtcNow - _lastToggleRequestTime < TimeSpan.FromMilliseconds(150))
+        {
+            OrbitLogger.Debug(LogCategory, "Ignored rapid duplicate toggle request (debounce 150ms).");
+            return;
+        }
+        _lastToggleRequestTime = DateTime.UtcNow;
+
+        OrbitLogger.Info(LogCategory, $"IPC Toggle requested. CurrentState={_lifecycleService.CurrentState}, IsVisible={IsVisible}, WindowVis={Visibility}");
+
+        // 1. Safeguard against overlapping animations: safely ignore while transitioning
+        if (_lifecycleService.CurrentState == CompanionState.Expanding ||
+            _lifecycleService.CurrentState == CompanionState.Collapsing)
+        {
+            OrbitLogger.Debug(LogCategory, "Ignored toggle request while companion is transitioning.");
+            return;
+        }
+
+        // 2. If the mascot is currently hidden (via Hide button, tray, or window state), bring it to focus on screen
+        if (_lifecycleService.CurrentState == CompanionState.Hidden || !IsVisible || Visibility != Visibility.Visible)
+        {
+            OrbitLogger.Info(LogCategory, "Mascot is hidden. Bringing mascot to focus on screen.");
+            _lifecycleService.Show();
+            Show();
+            Activate();
+            _overlayService.BringToFront(_hwnd);
+            _overlayService.ReapplyTopmost(_hwnd);
+            return;
+        }
+
+        // 3. If the mascot is currently visible on screen (Collapsed or Expanded), hide it (matching the Hide button)
+        OrbitLogger.Info(LogCategory, "Mascot is visible on screen. Hiding mascot.");
+        _lifecycleService.Hide();
+    }
+
     private void OnStateChanged(CompanionState newState)
     {
         Dispatcher.Invoke(() =>
@@ -343,15 +386,16 @@ public partial class MainWindow : Window
 
             heightAnim.Completed += (s2, e2) =>
             {
-                // Release animation clocks so properties aren't held
-                BeginAnimation(WidthProperty, null);
-                BeginAnimation(HeightProperty, null);
-                BeginAnimation(LeftProperty, null);
-
+                // Assign target values before detaching animations
                 Width = ExpandedWidth;
                 Height = targetExpandedHeight;
                 Left = expandedLeft;
                 Top = topY;
+
+                // Release animation clocks so properties aren't held
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
 
                 _lifecycleService.SetState(CompanionState.Expanded);
                 Activate();
@@ -394,15 +438,16 @@ public partial class MainWindow : Window
 
             widthAnim.Completed += (s2, e2) =>
             {
-                // Release animation clocks so properties aren't held
-                BeginAnimation(WidthProperty, null);
-                BeginAnimation(HeightProperty, null);
-                BeginAnimation(LeftProperty, null);
-
+                // Assign target values before detaching animations
                 Width = CollapsedWidth;
                 Height = CollapsedHeight;
                 Left = collapsedLeft;
                 Top = topY;
+
+                // Release animation clocks so properties aren't held
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
 
                 CollapsedView.Visibility = Visibility.Visible;
                 ExpandedView.Visibility = Visibility.Collapsed;
