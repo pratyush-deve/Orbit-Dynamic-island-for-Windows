@@ -12,6 +12,7 @@ using Orbit.Services.DevWorkspace;
 using Orbit.Services.Hubs;
 using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
+using Orbit.Services.SystemMonitor;
 using Orbit.UI.Mascot;
 
 namespace Orbit.UI.Panels;
@@ -41,12 +42,14 @@ public partial class ExpandedIsland : UserControl
     public bool IsInManageWorkAppsView { get; private set; }
     public bool IsInNotesView { get; private set; }
     public bool IsNotesModeActive => IsInNotesView;
+    public bool IsInSystemMonitorView { get; private set; }
 
     public event Action<bool>? NotesModeChanged;
 
     private IAgentStateManager? _agentStateManager;
     private ISocialHubService? _socialHubService;
     private IWorkHubService? _workHubService;
+    private ISystemMonitorService? _systemMonitorService;
     private bool _glowEnabled = true;
     private DateTime _lastTaskManagerLaunch = DateTime.MinValue;
     private DateTime _lastFileExplorerLaunch = DateTime.MinValue;
@@ -155,7 +158,8 @@ public partial class ExpandedIsland : UserControl
         IOrbitAttentionManager? attentionManager = null,
         ISocialHubService? socialHubService = null,
         IWorkHubService? workHubService = null,
-        INotesService? notesService = null)
+        INotesService? notesService = null,
+        ISystemMonitorService? systemMonitorService = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
         if (controlsService != null)
@@ -185,6 +189,11 @@ public partial class ExpandedIsland : UserControl
             ManageWorkAppsPanel.Initialize(workHubService, "MANAGE WORK APPS", "WORK");
         }
         NotesPanel.Initialize(notesService);
+        if (systemMonitorService != null)
+        {
+            _systemMonitorService = systemMonitorService;
+            SystemMonitorPanel.Initialize(systemMonitorService);
+        }
         if (attentionManager != null)
         {
             attentionManager.MascotStateChanged += (state, msg) =>
@@ -408,6 +417,12 @@ public partial class ExpandedIsland : UserControl
         IsInManageWorkAppsView = false;
         IsInNotesView = false;
 
+        if (IsInSystemMonitorView)
+        {
+            SystemMonitorPanel.StopMonitoring();
+            IsInSystemMonitorView = false;
+        }
+
         ActiveAppsContainer.BeginAnimation(OpacityProperty, null);
         ActiveAppsContainer.Visibility = Visibility.Collapsed;
         ActiveAppsContainer.Opacity = 0.0;
@@ -448,9 +463,20 @@ public partial class ExpandedIsland : UserControl
         NotesContainer.Visibility = Visibility.Collapsed;
         NotesContainer.Opacity = 0.0;
 
+        SystemMonitorContainer.BeginAnimation(OpacityProperty, null);
+        SystemMonitorContainer.Visibility = Visibility.Collapsed;
+        SystemMonitorContainer.Opacity = 0.0;
+
         HomeContentView.BeginAnimation(OpacityProperty, null);
         HomeContentView.Visibility = Visibility.Visible;
         HomeContentView.Opacity = 1.0;
+
+        TopLeftShortcutContainer?.BeginAnimation(OpacityProperty, null);
+        if (TopLeftShortcutContainer != null)
+        {
+            TopLeftShortcutContainer.Opacity = 1.0;
+            TopLeftShortcutContainer.Visibility = Visibility.Visible;
+        }
 
         HomeCardsScrollViewer?.ScrollToHorizontalOffset(0);
         UpdateHomeCardsScrollProgress();
@@ -472,6 +498,40 @@ public partial class ExpandedIsland : UserControl
         CollapseRequested?.Invoke();
     }
 
+    private void SetTopLeftShortcutsVisible(bool visible)
+    {
+        if (TopLeftShortcutContainer == null) return;
+
+        if (visible)
+        {
+            TopLeftShortcutContainer.Visibility = Visibility.Visible;
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(160))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s, e) =>
+            {
+                TopLeftShortcutContainer.BeginAnimation(OpacityProperty, null);
+                TopLeftShortcutContainer.Opacity = 1.0;
+            };
+            TopLeftShortcutContainer.BeginAnimation(OpacityProperty, fadeIn);
+        }
+        else
+        {
+            var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(140))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeOut.Completed += (s, e) =>
+            {
+                TopLeftShortcutContainer.BeginAnimation(OpacityProperty, null);
+                TopLeftShortcutContainer.Opacity = 0.0;
+                TopLeftShortcutContainer.Visibility = Visibility.Collapsed;
+            };
+            TopLeftShortcutContainer.BeginAnimation(OpacityProperty, fadeOut);
+        }
+    }
+
     private void OnCardActiveAppsClicked(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
@@ -479,6 +539,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "APPS card clicked. Switching to Active Apps view.");
 
         IsInActiveAppsView = true;
+        SetTopLeftShortcutsVisible(false);
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -511,6 +572,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in Active Apps view. Returning to Home.");
 
         IsInActiveAppsView = false;
+        SetTopLeftShortcutsVisible(true);
 
         // Reset to content-driven home expanded height
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
@@ -548,6 +610,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "CTRL card clicked. Switching to System Controls view.");
 
         IsInControlsView = true;
+        SetTopLeftShortcutsVisible(false);
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
@@ -580,6 +643,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in System Controls view. Returning to Home.");
 
         IsInControlsView = false;
+        SetTopLeftShortcutsVisible(true);
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -615,6 +679,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "DEV card clicked. Switching to Dev Mode view.");
 
         IsInDevModeView = true;
+        SetTopLeftShortcutsVisible(false);
         DesiredHeightChanged?.Invoke(DevModePanel.CalculateDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -648,6 +713,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in Dev Mode view. Returning to Home.");
 
         IsInDevModeView = false;
+        SetTopLeftShortcutsVisible(true);
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -763,6 +829,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "AI card clicked. Switching to AI Agent Monitor view.");
 
         IsInAiMonitorView = true;
+        SetTopLeftShortcutsVisible(false);
         _agentStateManager?.Refresh();
         DesiredHeightChanged?.Invoke(AiMonitorPanel.GetDesiredHeight());
 
@@ -796,6 +863,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in AI Agent Monitor view. Returning to Home.");
 
         IsInAiMonitorView = false;
+        SetTopLeftShortcutsVisible(true);
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -886,6 +954,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "SOCIAL card clicked. Switching to Social Hub view.");
 
         IsInSocialHubView = true;
+        SetTopLeftShortcutsVisible(false);
         SocialHubPanel.UpdateAppsDisplay();
         DesiredHeightChanged?.Invoke(SocialHubPanel.CalculateDesiredHeight());
 
@@ -919,6 +988,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in Social Hub view. Returning to Home.");
 
         IsInSocialHubView = false;
+        SetTopLeftShortcutsVisible(true);
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -988,6 +1058,7 @@ public partial class ExpandedIsland : UserControl
 
         IsInManageSocialAppsView = false;
         IsInSocialHubView = true;
+        SetTopLeftShortcutsVisible(false);
         SocialHubPanel.UpdateAppsDisplay();
         DesiredHeightChanged?.Invoke(SocialHubPanel.CalculateDesiredHeight());
 
@@ -1027,6 +1098,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "WORK card clicked. Switching to Work Hub view.");
 
         IsInWorkHubView = true;
+        SetTopLeftShortcutsVisible(false);
         WorkHubPanel.UpdateAppsDisplay();
         DesiredHeightChanged?.Invoke(WorkHubPanel.CalculateDesiredHeight());
 
@@ -1060,6 +1132,7 @@ public partial class ExpandedIsland : UserControl
         OrbitLogger.Info(LogCategory, "Back clicked in Work Hub view. Returning to Home.");
 
         IsInWorkHubView = false;
+        SetTopLeftShortcutsVisible(true);
         DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -1129,6 +1202,7 @@ public partial class ExpandedIsland : UserControl
 
         IsInManageWorkAppsView = false;
         IsInWorkHubView = true;
+        SetTopLeftShortcutsVisible(false);
         WorkHubPanel.UpdateAppsDisplay();
         DesiredHeightChanged?.Invoke(WorkHubPanel.CalculateDesiredHeight());
 
@@ -1191,12 +1265,13 @@ public partial class ExpandedIsland : UserControl
         // Cleanly exit any active workspace or hub before entering Notes mode
         if (IsInActiveAppsView || IsInControlsView || IsInDevModeView || IsInManageAppsView ||
             IsInAiMonitorView || IsInSocialHubView || IsInManageSocialAppsView ||
-            IsInWorkHubView || IsInManageWorkAppsView)
+            IsInWorkHubView || IsInManageWorkAppsView || IsInSystemMonitorView)
         {
             ResetToHomeView();
         }
 
         IsInNotesView = true;
+        SetTopLeftShortcutsVisible(false);
         NotesModeChanged?.Invoke(true);
 
         var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
@@ -1230,6 +1305,7 @@ public partial class ExpandedIsland : UserControl
 
         NotesPanel.SaveCurrentNotesSynchronously();
         IsInNotesView = false;
+        SetTopLeftShortcutsVisible(true);
 
         // Ensure Home view is visible and reset scroll before transition begins
         HomeContentView.Visibility = Visibility.Visible;
@@ -1274,30 +1350,91 @@ public partial class ExpandedIsland : UserControl
     private void OnTaskManagerClicked(object sender, RoutedEventArgs e)
     {
         e.Handled = true;
+        if (IsInSystemMonitorView) return;
+        OrbitLogger.Info(LogCategory, "Task Manager button clicked. Navigating to native System Monitor view.");
 
-        // Prevent duplicate launch attempts from rapid repeated clicks (1.5-second cooldown)
-        if (DateTime.UtcNow - _lastTaskManagerLaunch < TimeSpan.FromSeconds(1.5))
+        SwitchToSystemMonitorView();
+    }
+
+    public void SwitchToSystemMonitorView()
+    {
+        if (IsInSystemMonitorView) return;
+        OrbitLogger.Info(LogCategory, "Switching to System Monitor view.");
+
+        // Cleanly exit any active workspace, hub, or notes mode
+        if (IsInActiveAppsView || IsInControlsView || IsInDevModeView || IsInManageAppsView ||
+            IsInAiMonitorView || IsInSocialHubView || IsInManageSocialAppsView ||
+            IsInWorkHubView || IsInManageWorkAppsView || IsInNotesView)
         {
-            OrbitLogger.Debug(LogCategory, "Ignored duplicate Task Manager launch request (cooldown active).");
-            return;
+            ResetToHomeView();
         }
 
-        _lastTaskManagerLaunch = DateTime.UtcNow;
+        IsInSystemMonitorView = true;
+        SetTopLeftShortcutsVisible(false);
 
-        try
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
-            OrbitLogger.Info(LogCategory, "Launching native Windows Task Manager...");
-            var startInfo = new ProcessStartInfo
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            HomeContentView.BeginAnimation(OpacityProperty, null);
+            HomeContentView.Visibility = Visibility.Collapsed;
+            HomeContentView.Opacity = 0.0;
+
+            SystemMonitorContainer.Visibility = Visibility.Visible;
+            SystemMonitorPanel.StartMonitoring();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
             {
-                FileName = "taskmgr.exe",
-                UseShellExecute = true
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
-            Process.Start(startInfo);
-        }
-        catch (Exception ex)
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                SystemMonitorContainer.BeginAnimation(OpacityProperty, null);
+                SystemMonitorContainer.Opacity = 1.0;
+            };
+            SystemMonitorContainer.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        HomeContentView.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    private void OnSystemMonitorBackRequested()
+    {
+        OrbitLogger.Info(LogCategory, "Back clicked in System Monitor view. Returning to Home.");
+
+        IsInSystemMonitorView = false;
+        SystemMonitorPanel.StopMonitoring();
+        SetTopLeftShortcutsVisible(true);
+
+        DesiredHeightChanged?.Invoke(CalculateHomeDesiredHeight());
+
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150))
         {
-            OrbitLogger.Error(LogCategory, "Failed to launch Windows Task Manager.", ex);
-        }
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        fadeOut.Completed += (s, ev) =>
+        {
+            SystemMonitorContainer.BeginAnimation(OpacityProperty, null);
+            SystemMonitorContainer.Visibility = Visibility.Collapsed;
+            SystemMonitorContainer.Opacity = 0.0;
+
+            HomeContentView.Visibility = Visibility.Visible;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+            fadeIn.Completed += (s2, ev2) =>
+            {
+                HomeContentView.BeginAnimation(OpacityProperty, null);
+                HomeContentView.Opacity = 1.0;
+            };
+            HomeContentView.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        SystemMonitorContainer.BeginAnimation(OpacityProperty, fadeOut);
     }
 
     private void OnFileExplorerClicked(object sender, RoutedEventArgs e)

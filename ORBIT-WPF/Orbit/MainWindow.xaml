@@ -26,38 +26,49 @@
 
     <Grid x:Name="RootLayout" Background="{x:Null}">
         
-        <!-- STATE A: COLLAPSED (Screen-Top Dynamic Island Notch) -->
-        <Grid x:Name="CollapsedView"
-              Opacity="1.0"
-              Visibility="Visible"
+        <!-- 0. Dedicated Solid Signature Black Background for the Mascot Notch (Always opaque in both collapsed & expanded forms) -->
+        <Path x:Name="MascotNotchPermanentBg"
+              Width="160" Height="38"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Top"
+              Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
+              Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"
+              IsHitTestVisible="False"/>
+
+        <!-- 1. Carved Notch & Island Continuous Solid Dark Obsidian Glass Background -->
+        <Path x:Name="CollapsedNotchBg"
+              Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
-              Background="{x:Null}"
               Cursor="Hand"
-              MouseLeftButtonDown="OnMascotClick">
+              MouseLeftButtonDown="OnMascotClick"
+              Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
 
-            <!-- 1. Carved Notch Solid Dark Obsidian Glass Background -->
-            <Path x:Name="CollapsedNotchBg"
-                  Width="160"
-                  Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
-                  HorizontalAlignment="Center"
-                  VerticalAlignment="Top"
-                  Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
+        <!-- 2. EXPANDED ISLAND CONTENT (Cards, header, subviews - fades in during Stage 2) -->
+        <Grid x:Name="ExpandedView"
+              Opacity="0.0"
+              Visibility="Collapsed"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
+            <panels:ExpandedIsland x:Name="IslandPanel"
+                                   CollapseRequested="OnIslandCollapseRequested"
+                                   HideRequested="OnHideRequested"/>
+        </Grid>
 
-            <!-- 1.5 Animated Binary Stream Overlay (Active Working state data flow, strictly clipped to notch silhouette) -->
-            <Canvas x:Name="BinaryStreamOverlay"
-                    Width="160" Height="38"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"
-                    Opacity="0"
-                    Visibility="Collapsed"
-                    IsHitTestVisible="False">
-                <Canvas.Clip>
-                    <PathGeometry Figures="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
-                </Canvas.Clip>
-                <Canvas.Effect>
-                    <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.35"/>
-                </Canvas.Effect>
+        <!-- 2.5 Animated Binary Stream Overlay (Active Working state data flow, strictly clipped to notch cradle) -->
+        <Canvas x:Name="BinaryStreamOverlay"
+                Width="160" Height="38"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                Opacity="0"
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
+            <Canvas.Clip>
+                <PathGeometry Figures="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
+            </Canvas.Clip>
+            <Canvas.Effect>
+                <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.35"/>
+            </Canvas.Effect>
 
                 <!-- Left Column 1 (Outer Left) -->
                 <TextBlock Canvas.Left="27" Canvas.Top="0"
@@ -196,17 +207,17 @@
                     <Run Text="1" Foreground="#C084FC" /><LineBreak/>
                     <Run Text="0" Foreground="#7C3AED" />
                 </TextBlock>
-            </Canvas>
+        </Canvas>
 
-            <!-- 2. Subtle, Minimal Perimeter Outline (soft gradient descending from top bezel) -->
+            <!-- 3. Subtle, Minimal Perimeter Outline (soft gradient descending from top bezel) -->
             <Path x:Name="CollapsedNotchOutline"
-                  Width="160"
                   StrokeThickness="1.0"
                   StrokeStartLineCap="Round"
                   StrokeEndLineCap="Round"
                   StrokeLineJoin="Round"
-                  HorizontalAlignment="Center"
-                  VerticalAlignment="Top"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  IsHitTestVisible="False"
                   Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0">
                 <Path.Stroke>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
@@ -226,29 +237,55 @@
                 </Path.Effect>
             </Path>
 
-            <!-- 3. Mascot Eyes (Centered inside the carved notch cradle) -->
-            <mascot:EyeMascot x:Name="PillMascot"
-                              HorizontalAlignment="Center"
-                              VerticalAlignment="Top"
-                              Margin="0,1,0,0"
-                              IsHitTestVisible="False">
-                <mascot:EyeMascot.LayoutTransform>
-                    <ScaleTransform ScaleX="0.68" ScaleY="0.68"/>
-                </mascot:EyeMascot.LayoutTransform>
-            </mascot:EyeMascot>
-        </Grid>
+            <!-- 3.5 Faint Indication of the Mascot Notch Boundary (Shelf line separating notch from dashboard) -->
+            <Path x:Name="MascotNotchBoundaryIndicator"
+                  StrokeThickness="1.0"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
+                  StrokeLineJoin="Round"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  IsHitTestVisible="False"
+                  Data="M 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#00A855F7" Offset="0.0"/>
+                        <GradientStop Color="#15A855F7" Offset="0.25"/>
+                        <GradientStop Color="#32A855F7" Offset="0.65"/>
+                        <GradientStop Color="#4FC084FC" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+                <Path.Effect>
+                    <DropShadowEffect x:Name="MascotNotchBoundaryGlow"
+                                      Color="#A855F7"
+                                      BlurRadius="4"
+                                      ShadowDepth="0"
+                                      Opacity="0.20"/>
+                </Path.Effect>
+            </Path>
 
-        <!-- STATE B: EXPANDED (Island Card) -->
-        <Grid x:Name="ExpandedView"
-              Opacity="1.0"
-              Visibility="Collapsed"
-              HorizontalAlignment="Stretch"
-              VerticalAlignment="Stretch">
-            
-            <panels:ExpandedIsland x:Name="IslandPanel"
-                                   CollapseRequested="OnIslandCollapseRequested"
-                                   HideRequested="OnHideRequested"/>
-        </Grid>
+            <!-- 4. Mascot Eyes & Mouth (Centered inside the carved notch cradle at all times, foreground) -->
+            <Grid Width="160" Height="38"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Top"
+                  Cursor="Hand"
+                  MouseLeftButtonDown="OnMascotClick">
+                <!-- Strict notch boundary clip: guarantees eyes & mouth can move throughout mascot area but never escape into parent box -->
+                <Grid.Clip>
+                    <PathGeometry Figures="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
+                </Grid.Clip>
+                <mascot:EyeMascot x:Name="PillMascot"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Top"
+                                  Margin="0,1,0,0"
+                                  IsHitTestVisible="False">
+                    <mascot:EyeMascot.LayoutTransform>
+                        <ScaleTransform ScaleX="0.68" ScaleY="0.68"/>
+                    </mascot:EyeMascot.LayoutTransform>
+                </mascot:EyeMascot>
+            </Grid>
 
-    </Grid>
+            <!-- Compatibility element -->
+            <Grid x:Name="CollapsedView" Visibility="Collapsed" IsHitTestVisible="False"/>
+        </Grid>
 </Window>

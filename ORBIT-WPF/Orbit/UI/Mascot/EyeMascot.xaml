@@ -44,6 +44,18 @@
                     <Border.Effect>
                         <DropShadowEffect x:Name="LeftEyeGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
                     </Border.Effect>
+
+                    <!-- Tiny Natural Black Pupil -->
+                    <Border x:Name="LeftPupil"
+                            Width="5" Height="8"
+                            CornerRadius="2.5"
+                            Background="#0A0812"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="LeftPupilTransform"/>
+                        </Border.RenderTransform>
+                    </Border>
                 </Border>
 
                 <!-- 2. Left Focused Working Eye (Determined AI companion concentrating) -->
@@ -100,6 +112,18 @@
                     <Border.Effect>
                         <DropShadowEffect x:Name="RightEyeGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
                     </Border.Effect>
+
+                    <!-- Tiny Natural Black Pupil -->
+                    <Border x:Name="RightPupil"
+                            Width="5" Height="8"
+                            CornerRadius="2.5"
+                            Background="#0A0812"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                        <Border.RenderTransform>
+                            <TranslateTransform x:Name="RightPupilTransform"/>
+                        </Border.RenderTransform>
+                    </Border>
                 </Border>
 
                 <!-- 2. Right Focused Working Eye (Determined AI companion concentrating) -->

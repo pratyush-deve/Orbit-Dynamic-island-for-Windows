@@ -10,8 +10,9 @@
              d:DesignHeight="240" d:DesignWidth="440">
 
     <Grid x:Name="RootIsland">
-        <!-- Dynamic Island Notch Frame (Background, neon border contour, and drop shadow glow) -->
+        <!-- Dynamic Island Notch Frame (Managed seamlessly by MainWindow unified contour) -->
         <Path x:Name="IslandFramePath"
+              Visibility="Collapsed"
               Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
               Stroke="{DynamicResource Brush.Gradient.PillBorder}"
               StrokeThickness="1.5"
@@ -29,8 +30,9 @@
             </Path.Effect>
         </Path>
 
-        <!-- Subtle Dynamic Island Shelf Highlight under Mascot Notch -->
+        <!-- Dynamic Island Shelf Highlight -->
         <Path x:Name="NotchAccentPath"
+              Visibility="Collapsed"
               Stroke="#C084FC"
               StrokeThickness="1.2"
               Opacity="0.30"
@@ -41,24 +43,28 @@
               IsHitTestVisible="False"/>
 
         <!-- Main Island Content Surface -->
-        <Grid x:Name="IslandContentGrid" Margin="14,4,14,12">
+        <Grid x:Name="IslandContentGrid" Margin="14,2,14,6">
             <Grid.RowDefinitions>
                 <!-- Row 0: Screen-Top Notch Header Bar (Task Manager, File Explorer, Notch Mascot, Hide) -->
-                <RowDefinition Height="44"/>
+                <RowDefinition Height="32"/>
                 <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- Top-Left Task Manager Shortcut Button -->
-            <Button x:Name="BtnTaskManager"
-                    Grid.Row="0"
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    Width="26"
-                    Height="22"
-                    Margin="6,0,0,0"
-                    Cursor="Hand"
-                    Click="OnTaskManagerClicked">
+            <!-- Top-Left Shortcut Buttons (Task Manager & File Explorer) - Shown only on Home View -->
+            <StackPanel x:Name="TopLeftShortcutContainer"
+                        Grid.Row="0"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center">
+                <!-- Top-Left Task Manager Shortcut Button -->
+                <Button x:Name="BtnTaskManager"
+                        Width="26"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Cursor="Hand"
+                        ToolTip="System Monitor"
+                        Click="OnTaskManagerClicked">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="BtnBorder"
@@ -113,12 +119,9 @@
 
                 <!-- Top-Left File Explorer Shortcut Button -->
                 <Button x:Name="BtnFileExplorer"
-                        Grid.Row="0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Center"
                         Width="26"
                         Height="22"
-                        Margin="38,0,0,0"
+                        Margin="6,0,0,0"
                         Cursor="Hand"
                         Click="OnFileExplorerClicked">
                     <Button.Template>
@@ -175,15 +178,15 @@
                         </ControlTemplate>
                     </Button.Template>
                 </Button>
+            </StackPanel>
 
-                <!-- 1. Expressive Mascot Eyes in Screen-Top Notch -->
+                <!-- 1. Expressive Mascot Eyes in Screen-Top Notch (Handled continuously by MainWindow PillMascot) -->
                 <mascot:EyeMascot x:Name="IslandMascot"
                                   Grid.Row="0"
                                   HorizontalAlignment="Center"
                                   VerticalAlignment="Center"
                                   Margin="0,-2,0,0"
-                                  Cursor="Hand"
-                                  MouseLeftButtonDown="OnMascotClicked"/>
+                                  Visibility="Collapsed"/>
 
                 <!-- Top-Right Tiny Text Hide Button (Hides to system tray) -->
                 <Button x:Name="BtnHidePanel"
@@ -269,48 +272,25 @@
                         </Grid.RowDefinitions>
 
                         <!-- Header Section: Centered ORBIT Branding & Right-Aligned NOTES Card -->
-                        <Grid Grid.Row="0" HorizontalAlignment="Stretch" Margin="0,0,0,12">
-                            <!-- Center: ORBIT + v2.0 + Subtitle -->
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                    <TextBlock Text="ORBIT"
-                                               FontFamily="{DynamicResource Font.Main}"
-                                               FontSize="18"
-                                               FontWeight="Bold"
-                                               Foreground="{DynamicResource Brush.Text.Primary}">
-                                        <TextBlock.Effect>
-                                            <DropShadowEffect BlurRadius="12" Color="{DynamicResource Color.Accent.PurpleLight}" Opacity="0.55" ShadowDepth="0"/>
-                                        </TextBlock.Effect>
-                                    </TextBlock>
-
-                                    <Border Background="#2B1A4A"
-                                            BorderBrush="{DynamicResource Brush.Accent.Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="6"
-                                            Padding="6,1"
-                                            Margin="8,0,0,0"
-                                            VerticalAlignment="Center">
-                                        <TextBlock Text="v2.0"
-                                                   FontSize="9.5"
-                                                   FontWeight="Bold"
-                                                   Foreground="{DynamicResource Brush.Accent.PurpleLight}"/>
-                                    </Border>
-                                </StackPanel>
-
-                                <TextBlock Text="YOUR DESKTOP COMPANION"
-                                           FontFamily="{DynamicResource Font.Main}"
-                                           FontSize="9"
-                                           FontWeight="SemiBold"
-                                           Foreground="{DynamicResource Brush.Text.Muted}"
-                                           HorizontalAlignment="Center"
-                                           Margin="0,3,0,0"/>
-                            </StackPanel>
+                        <Grid Grid.Row="0" HorizontalAlignment="Stretch" Margin="0,0,0,6">
+                            <!-- Center: ORBIT in clean, compact typography -->
+                            <TextBlock Text="ORBIT"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontFamily="{DynamicResource Font.Main}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Foreground="{DynamicResource Brush.Text.Primary}">
+                                <TextBlock.Effect>
+                                    <DropShadowEffect BlurRadius="10" Color="{DynamicResource Color.Accent.PurpleLight}" Opacity="0.45" ShadowDepth="0"/>
+                                </TextBlock.Effect>
+                            </TextBlock>
 
                             <!-- Right: Compact NOTES Card -->
                             <Button x:Name="BtnNotesCard"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    Height="32"
+                                    Height="26"
                                     Margin="0,0,4,0"
                                     Cursor="Hand"
                                     Click="OnNotesButtonClicked">
@@ -320,8 +300,8 @@
                                                 Background="#1E1630"
                                                 BorderBrush="#3D295F"
                                                 BorderThickness="1.2"
-                                                CornerRadius="9"
-                                                Padding="9,5"
+                                                CornerRadius="7"
+                                                Padding="7,3"
                                                 RenderTransformOrigin="0.5,0.5"
                                                 SnapsToDevicePixels="True">
                                             <Border.RenderTransform>
@@ -332,8 +312,8 @@
                                                 <!-- Minimal Notebook Icon -->
                                                 <Path x:Name="GlyphNotes"
                                                       Data="M2.5,2 L10.5,2 C11,2 11.5,2.5 11.5,3 L11.5,13 C11.5,13.5 11,14 10.5,14 L2.5,14 C2,14 1.5,13.5 1.5,13 L1.5,3 C1.5,2.5 2,2 2.5,2 Z M4,5 L9,5 M4,8 L9,8 M4,11 L7,11"
-                                                      Width="11"
-                                                      Height="11"
+                                                      Width="10"
+                                                      Height="10"
                                                       Stretch="Uniform"
                                                       Stroke="{DynamicResource Brush.Text.Muted}"
                                                       StrokeThickness="1.3"
@@ -341,13 +321,13 @@
                                                       StrokeEndLineCap="Round"
                                                       StrokeLineJoin="Round"
                                                       VerticalAlignment="Center"
-                                                      Margin="0,0,6,0"/>
+                                                      Margin="0,0,5,0"/>
 
                                                 <!-- NOTES Label -->
                                                 <TextBlock x:Name="TxtNotesLabel"
                                                            Text="NOTES"
                                                            FontFamily="{DynamicResource Font.Main}"
-                                                           FontSize="10.5"
+                                                           FontSize="9.5"
                                                            FontWeight="Bold"
                                                            Foreground="{DynamicResource Brush.Text.Primary}"
                                                            VerticalAlignment="Center"/>
@@ -396,7 +376,7 @@
                                       VerticalScrollBarVisibility="Disabled"
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Center"
-                                      MinHeight="106"
+                                      MinHeight="80"
                                       Focusable="False"
                                       CanContentScroll="False"
                                       PanningMode="HorizontalOnly"
@@ -405,12 +385,12 @@
                                       Padding="0"
                                       ScrollChanged="OnHomeCardsScrollChanged"
                                       PreviewMouseWheel="OnHomeCardsScrollViewerPreviewMouseWheel">
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,4,2,8">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,2,0,2">
                                 <!-- Card 1: Dev Mode -->
                                 <components:NavigationCard x:Name="CardDevMode"
-                                                           Width="94"
-                                                           Height="94"
-                                                           Margin="0,0,10,0"
+                                                           Width="68"
+                                                           Height="78"
+                                                           Margin="0,0,6,0"
                                                            CardBadge="DEV"
                                                            CardLabel="Dev Mode"
                                                            Click="OnCardDevModeClicked">
@@ -433,9 +413,9 @@
 
                                 <!-- Card 2: Active Apps -->
                                 <components:NavigationCard x:Name="CardActiveApps"
-                                                           Width="94"
-                                                           Height="94"
-                                                           Margin="0,0,10,0"
+                                                           Width="68"
+                                                           Height="78"
+                                                           Margin="0,0,6,0"
                                                            CardBadge="APPS"
                                                            CardLabel="Active Apps"
                                                            Click="OnCardActiveAppsClicked">
@@ -480,9 +460,9 @@
 
                                 <!-- Card 3: AI Agent -->
                                 <components:NavigationCard x:Name="CardAiAgent"
-                                                           Width="94"
-                                                           Height="94"
-                                                           Margin="0,0,10,0"
+                                                           Width="68"
+                                                           Height="78"
+                                                           Margin="0,0,6,0"
                                                            CardBadge="AI"
                                                            CardLabel="AI Agent"
                                                            Click="OnCardAiAgentClicked">
@@ -514,9 +494,9 @@
 
                                 <!-- Card 4: Quick Controls -->
                                 <components:NavigationCard x:Name="CardControls"
-                                                           Width="94"
-                                                           Height="94"
-                                                           Margin="0,0,10,0"
+                                                           Width="68"
+                                                           Height="78"
+                                                           Margin="0,0,6,0"
                                                            CardBadge="CTRL"
                                                            CardLabel="Controls"
                                                            Click="OnCardControlsClicked">
@@ -572,9 +552,9 @@
 
                                 <!-- Card 5: Social Hub -->
                                 <components:NavigationCard x:Name="CardSocial"
-                                                           Width="94"
-                                                           Height="94"
-                                                           Margin="0,0,10,0"
+                                                           Width="68"
+                                                           Height="78"
+                                                           Margin="0,0,6,0"
                                                            CardBadge="SOCIAL"
                                                            CardLabel="Social Hub"
                                                            Click="OnCardSocialClicked">
@@ -618,8 +598,8 @@
 
                                 <!-- Card 6: Work / Productivity -->
                                 <components:NavigationCard x:Name="CardWork"
-                                                           Width="94"
-                                                           Height="94"
+                                                           Width="68"
+                                                           Height="78"
                                                            Margin="0,0,0,0"
                                                            CardBadge="WORK"
                                                            CardLabel="Productivity"
@@ -661,11 +641,12 @@
                             </StackPanel>
                         </ScrollViewer>
 
-                        <!-- Row 2: Subtle Horizontal Scroll Progress Indicator (2.5px) -->
+                        <!-- Row 2: Subtle Horizontal Scroll Progress Indicator (Collapsed since all 6 cards fit side-by-side) -->
                         <Border x:Name="HomeCardsScrollTrack"
                                 Grid.Row="2"
                                 Width="120"
                                 Height="2.5"
+                                Visibility="Collapsed"
                                 Background="#221538"
                                 BorderBrush="#3E2368"
                                 BorderThickness="0.8"
@@ -715,7 +696,8 @@
                     <Grid x:Name="DevModeContainer"
                           Visibility="Collapsed"
                           Opacity="0.0"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          ClipToBounds="False">
                         <panels:DevModeView x:Name="DevModePanel"
                                             BackRequested="OnDevModeBackRequested"
                                             ManageAppsRequested="OnDevModeManageAppsRequested"/>
@@ -734,7 +716,8 @@
                     <Grid x:Name="AiMonitorContainer"
                           Visibility="Collapsed"
                           Opacity="0.0"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          ClipToBounds="False">
                         <panels:AiAgentMonitorView x:Name="AiMonitorPanel"
                                                    BackRequested="OnAiMonitorBackRequested"/>
                     </Grid>
@@ -743,7 +726,8 @@
                     <Grid x:Name="SocialHubContainer"
                           Visibility="Collapsed"
                           Opacity="0.0"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          ClipToBounds="False">
                         <panels:SocialHubView x:Name="SocialHubPanel"
                                               BackRequested="OnSocialHubBackRequested"
                                               ManageAppsRequested="OnSocialHubManageAppsRequested"/>
@@ -762,7 +746,8 @@
                     <Grid x:Name="WorkHubContainer"
                           Visibility="Collapsed"
                           Opacity="0.0"
-                          HorizontalAlignment="Stretch">
+                          HorizontalAlignment="Stretch"
+                          ClipToBounds="False">
                         <panels:WorkHubView x:Name="WorkHubPanel"
                                             BackRequested="OnWorkHubBackRequested"
                                             ManageAppsRequested="OnWorkHubManageAppsRequested"/>
@@ -787,6 +772,18 @@
                                           HorizontalAlignment="Stretch"
                                           VerticalAlignment="Stretch"
                                           BackRequested="OnNotesBackRequested"/>
+                    </Grid>
+
+                    <!-- View L: Dedicated Native System Monitor View -->
+                    <Grid x:Name="SystemMonitorContainer"
+                          Visibility="Collapsed"
+                          Opacity="0.0"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch">
+                        <panels:SystemMonitorView x:Name="SystemMonitorPanel"
+                                                  HorizontalAlignment="Stretch"
+                                                  VerticalAlignment="Stretch"
+                                                  BackRequested="OnSystemMonitorBackRequested"/>
                     </Grid>
                 </Grid>
             </Grid>

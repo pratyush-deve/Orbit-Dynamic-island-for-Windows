@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Orbit.Core;
 using Orbit.Services.DevWorkspace;
 
@@ -9,6 +10,7 @@ namespace Orbit.UI.Panels;
 public partial class DevModeView : UserControl, IDisposable
 {
     private const string LogCategory = "DEV_MODE_VIEW";
+    private const double TargetViewHeight = 200.0;
 
     public event Action? BackRequested;
     public event Action? ManageAppsRequested;
@@ -18,6 +20,9 @@ public partial class DevModeView : UserControl, IDisposable
     private bool _isInitialized;
     private bool _disposed;
     private bool _isLaunching;
+
+    private double _targetScrollOffset;
+    private DispatcherTimer? _smoothScrollTimer;
 
     public DevModeView()
     {
@@ -37,11 +42,7 @@ public partial class DevModeView : UserControl, IDisposable
 
     public double CalculateDesiredHeight()
     {
-        int count = _workspaceService?.SelectedApps.Count ?? 0;
-        if (count == 0) return 240.0;
-        if (count <= 4) return 255.0; // 1 compact row + header + activate
-        if (count <= 8) return 335.0; // 2 rows
-        return 385.0;                 // 3+ rows (scrollable cards)
+        return TargetViewHeight;
     }
 
     public void UpdateWorkspaceDisplay()
@@ -58,6 +59,11 @@ public partial class DevModeView : UserControl, IDisposable
             BtnActivate.IsEnabled = hasApps;
             BtnActivate.Opacity = hasApps ? 1.0 : 0.45;
 
+            // Reset scroll position on dataset update
+            _targetScrollOffset = 0;
+            AppsScrollViewer.ScrollToHorizontalOffset(0);
+
+            UpdateAppsScrollProgress();
             DesiredHeightChanged?.Invoke(CalculateDesiredHeight());
         }
 
@@ -119,10 +125,115 @@ public partial class DevModeView : UserControl, IDisposable
         e.Handled = true;
     }
 
+    private void OnAppsScrollViewerScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        UpdateAppsScrollProgress();
+    }
+
+    private void UpdateAppsScrollProgress()
+    {
+        if (AppsScrollViewer == null) return;
+
+        double scrollable = AppsScrollViewer.ScrollableWidth;
+        if (scrollable > 0.5)
+        {
+            if (ItemsWorkspaceApps.HorizontalAlignment != System.Windows.HorizontalAlignment.Left)
+            {
+                ItemsWorkspaceApps.HorizontalAlignment = System.Windows.HorizontalAlignment.Left;
+            }
+
+            if (AppsScrollTrack != null && AppsScrollThumb != null && AppsScrollThumbTransform != null)
+            {
+                AppsScrollTrack.Visibility = Visibility.Visible;
+                double extent = AppsScrollViewer.ExtentWidth;
+                double viewport = AppsScrollViewer.ViewportWidth;
+                double trackWidth = AppsScrollTrack.ActualWidth > 0 ? AppsScrollTrack.ActualWidth : AppsScrollTrack.Width;
+                if (trackWidth <= 0) trackWidth = 90.0;
+
+                double thumbWidth = Math.Max(24, (viewport / extent) * trackWidth);
+                AppsScrollThumb.Width = thumbWidth;
+
+                double maxThumbOffset = Math.Max(0, trackWidth - thumbWidth);
+                double ratio = AppsScrollViewer.HorizontalOffset / scrollable;
+                AppsScrollThumbTransform.X = Math.Clamp(ratio * maxThumbOffset, 0, maxThumbOffset);
+            }
+        }
+        else
+        {
+            if (ItemsWorkspaceApps.HorizontalAlignment != System.Windows.HorizontalAlignment.Center)
+            {
+                ItemsWorkspaceApps.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+            }
+
+            if (AppsScrollTrack != null)
+            {
+                AppsScrollTrack.Visibility = Visibility.Collapsed;
+            }
+        }
+    }
+
+    private void OnAppsScrollViewerPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (AppsScrollViewer == null || AppsScrollViewer.ScrollableWidth <= 0) return;
+
+        if (_smoothScrollTimer == null || !_smoothScrollTimer.IsEnabled)
+        {
+            _targetScrollOffset = AppsScrollViewer.HorizontalOffset;
+        }
+
+        double delta = -e.Delta * 0.75;
+        _targetScrollOffset = Math.Clamp(_targetScrollOffset + delta, 0, AppsScrollViewer.ScrollableWidth);
+
+        StartSmoothScroll();
+        e.Handled = true;
+    }
+
+    private void StartSmoothScroll()
+    {
+        if (_smoothScrollTimer == null)
+        {
+            _smoothScrollTimer = new DispatcherTimer(DispatcherPriority.Render)
+            {
+                Interval = TimeSpan.FromMilliseconds(16)
+            };
+            _smoothScrollTimer.Tick += OnSmoothScrollTick;
+        }
+
+        if (!_smoothScrollTimer.IsEnabled)
+        {
+            _smoothScrollTimer.Start();
+        }
+    }
+
+    private void OnSmoothScrollTick(object? sender, EventArgs e)
+    {
+        if (AppsScrollViewer == null)
+        {
+            _smoothScrollTimer?.Stop();
+            return;
+        }
+
+        double current = AppsScrollViewer.HorizontalOffset;
+        double diff = _targetScrollOffset - current;
+
+        if (Math.Abs(diff) < 0.8)
+        {
+            AppsScrollViewer.ScrollToHorizontalOffset(_targetScrollOffset);
+            _smoothScrollTimer?.Stop();
+        }
+        else
+        {
+            double next = current + (diff * 0.35);
+            AppsScrollViewer.ScrollToHorizontalOffset(next);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+
+        _smoothScrollTimer?.Stop();
 
         if (_workspaceService != null)
         {
@@ -130,4 +241,3 @@ public partial class DevModeView : UserControl, IDisposable
         }
     }
 }
-

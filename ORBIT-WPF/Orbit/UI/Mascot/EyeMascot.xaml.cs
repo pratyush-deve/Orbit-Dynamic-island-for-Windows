@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Orbit.Platform.Windows;
 
 namespace Orbit.UI.Mascot;
 
@@ -38,6 +39,17 @@ public partial class EyeMascot : UserControl
 
     private Orbit.Models.AgentState _currentMouthState = Orbit.Models.AgentState.Idle;
 
+    /// <summary>
+    /// Raised whenever the mascot visual state changes or when the Completed (DONE) hold expires back to Idle.
+    /// Synchronizes external elements like the notch bottom border with the mascot expression.
+    /// </summary>
+    public event Action<Orbit.Models.AgentState>? VisualStateChanged;
+
+    /// <summary>
+    /// Gets whether the mascot is currently holding the Completed (DONE) green visual state.
+    /// </summary>
+    public bool IsHoldingDoneState => _isHoldingDoneState;
+
     private DispatcherTimer? _donePersistenceTimer;
     private int _doneTimerToken = 0;
     private bool _isHoldingDoneState = false;
@@ -52,10 +64,25 @@ public partial class EyeMascot : UserControl
     /// </summary>
     public bool IsEmbeddedInNotch { get; set; } = true;
 
+    /// <summary>
+    /// Indicates whether the parent companion is in expanded dashboard mode.
+    /// When true, gaze motion extends expressively across the full mascot notch boundary,
+    /// while strictly clamped from escaping the notch or entering the main parent box.
+    /// </summary>
+    public bool IsExpanded { get; set; } = false;
+
     private double _lastTargetLeftX = 0.0;
     private double _lastTargetLeftY = 0.0;
     private double _lastTargetRightX = 0.0;
     private double _lastTargetRightY = 0.0;
+    private double _lastEyeballLeftX = 0.0;
+    private double _lastEyeballLeftY = 0.0;
+    private double _lastEyeballRightX = 0.0;
+    private double _lastEyeballRightY = 0.0;
+
+    // Periodic global cursor awareness & mouse-inactivity state
+    private NativeMethods.POINT _lastSampledCursorPos = new(0, 0);
+    private int _consecutiveInactiveTicks = 0;
 
     public EyeMascot()
     {
@@ -150,9 +177,18 @@ public partial class EyeMascot : UserControl
     /// Follows the mouse cursor smoothly while inside the ORBIT window.
     /// Calculates direction vector from each eye's centre and clamps within the sclera.
     /// Fast and responsive with micro-easing to eliminate lag while avoiding jitter.
+    /// <summary>
+    /// Follows the mouse cursor smoothly while inside the ORBIT window.
+    /// Calculates direction vector from each eye's centre and clamps within the notch.
+    /// In expanded form, the black eyeballs follow the cursor with even greater flexibility and agility.
     /// </summary>
     public void TrackCursor(Point cursorRelativeToMascot)
     {
+        if (_currentMouthState == Orbit.Models.AgentState.Working)
+        {
+            return; // Maintain rock-solid, focused concentration during active work
+        }
+
         bool wasIdle = !_isTrackingCursor;
         _isTrackingCursor = true;
         _glanceTimer.Stop();
@@ -161,6 +197,9 @@ public partial class EyeMascot : UserControl
         var (leftX, leftY) = CalculatePupilOffset(cursorRelativeToMascot.X - 11.0, cursorRelativeToMascot.Y - 13.0);
         var (rightX, rightY) = CalculatePupilOffset(cursorRelativeToMascot.X - 43.0, cursorRelativeToMascot.Y - 13.0);
 
+        var (leftEyeballX, leftEyeballY) = CalculateEyeballOffset(cursorRelativeToMascot.X - 11.0, cursorRelativeToMascot.Y - 13.0);
+        var (rightEyeballX, rightEyeballY) = CalculateEyeballOffset(cursorRelativeToMascot.X - 43.0, cursorRelativeToMascot.Y - 13.0);
+
         if (wasIdle)
         {
             // Initial acquisition: smooth 100ms glide from wherever the idle gaze was
@@ -168,19 +207,33 @@ public partial class EyeMascot : UserControl
             _lastTargetLeftY = leftY;
             _lastTargetRightX = rightX;
             _lastTargetRightY = rightY;
-            AnimatePupilsIndividual(leftX, leftY, rightX, rightY, TimeSpan.FromMilliseconds(100));
+            _lastEyeballLeftX = leftEyeballX;
+            _lastEyeballLeftY = leftEyeballY;
+            _lastEyeballRightX = rightEyeballX;
+            _lastEyeballRightY = rightEyeballY;
+
+            AnimatePupilsIndividual(leftX, leftY, rightX, rightY, 
+                leftEyeballX, leftEyeballY, rightEyeballX, rightEyeballY, 
+                TimeSpan.FromMilliseconds(100));
             return;
         }
 
         // Active tracking: fast, fluid response with micro-threshold to prevent redundant redraws
-        if (Math.Abs(leftX - _lastTargetLeftX) > 0.04 || Math.Abs(leftY - _lastTargetLeftY) > 0.04)
+        if (Math.Abs(leftX - _lastTargetLeftX) > 0.04 || Math.Abs(leftY - _lastTargetLeftY) > 0.04 ||
+            Math.Abs(leftEyeballX - _lastEyeballLeftX) > 0.04 || Math.Abs(leftEyeballY - _lastEyeballLeftY) > 0.04)
         {
             _lastTargetLeftX = leftX;
             _lastTargetLeftY = leftY;
             _lastTargetRightX = rightX;
             _lastTargetRightY = rightY;
+            _lastEyeballLeftX = leftEyeballX;
+            _lastEyeballLeftY = leftEyeballY;
+            _lastEyeballRightX = rightEyeballX;
+            _lastEyeballRightY = rightEyeballY;
 
-            AnimatePupilsIndividual(leftX, leftY, rightX, rightY, TimeSpan.FromMilliseconds(20));
+            AnimatePupilsIndividual(leftX, leftY, rightX, rightY, 
+                leftEyeballX, leftEyeballY, rightEyeballX, rightEyeballY, 
+                TimeSpan.FromMilliseconds(20));
         }
     }
 
@@ -196,24 +249,31 @@ public partial class EyeMascot : UserControl
         _lastTargetLeftY = 0.0;
         _lastTargetRightX = 0.0;
         _lastTargetRightY = 0.0;
+        _lastEyeballLeftX = 0.0;
+        _lastEyeballLeftY = 0.0;
+        _lastEyeballRightX = 0.0;
+        _lastEyeballRightY = 0.0;
+        _consecutiveInactiveTicks = 0;
 
-        // Smoothly glide pupils to resting center
-        AnimatePupilsIndividual(0.0, 0.0, 0.0, 0.0, TimeSpan.FromMilliseconds(280));
+        // Smoothly glide both white capsules and black eyeballs to resting center
+        AnimatePupilsIndividual(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, TimeSpan.FromMilliseconds(280));
 
         // Resume natural idle glance timer
-        _glanceTimer.Interval = TimeSpan.FromSeconds(2.0 + (_random.NextDouble() * 2.5));
+        _glanceTimer.Interval = TimeSpan.FromSeconds(2.0 + (_random.NextDouble() * 1.5));
         _glanceTimer.Start();
     }
 
     /// <summary>
-    /// Clamps pupil displacement within an elliptic boundary inside the eyeball.
-    /// Mathematically guarantees that neither pupil can ever leave the sclera.
-    /// Rapid distance curve provides immediate gaze direction even for small cursor shifts.
+    /// Clamps white capsule displacement within an elliptic boundary inside the notch cradle.
+    /// In closed form: retains exact subtle deflection (4.0px X, 2.6px Y).
+    /// In expanded form: allows full expressive motion across the mascot boundary (7.5px X, 4.5px Y down),
+    /// strictly clamped so eyes and mouth never leave the mascot notch boundary or enter the parent box.
     /// </summary>
-    private static (double x, double y) CalculatePupilOffset(double deltaX, double deltaY)
+    private (double x, double y) CalculatePupilOffset(double deltaX, double deltaY)
     {
-        const double maxRadiusX = 4.0;
-        const double maxRadiusY = 2.6;
+        double maxRadiusX = IsExpanded ? 7.5 : 4.0;
+        double maxRadiusYUp = IsExpanded ? 2.5 : 2.6;
+        double maxRadiusYDown = IsExpanded ? 4.5 : 2.6;
 
         double dist = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
         if (dist < 0.1) return (0.0, 0.0);
@@ -222,8 +282,11 @@ public partial class EyeMascot : UserControl
         double dirX = deltaX / dist;
         double dirY = deltaY / dist;
 
-        // Snappy distance response: reaches full gaze deflection within 30 DIPs
-        double intensity = Math.Min(1.0, dist / 30.0);
+        // Snappy distance response: reaches full gaze deflection smoothly
+        double reachDistance = IsExpanded ? 50.0 : 30.0;
+        double intensity = Math.Min(1.0, dist / reachDistance);
+
+        double maxRadiusY = dirY >= 0 ? maxRadiusYDown : maxRadiusYUp;
 
         // Elliptically clamped offsets
         double targetX = dirX * maxRadiusX * intensity;
@@ -233,54 +296,155 @@ public partial class EyeMascot : UserControl
     }
 
     /// <summary>
-    /// Playful randomized idle glances when mouse is outside the window.
+    /// Calculates the displacement for the tiny black eyeballs nested inside the white eye capsules.
+    /// In idle/collapsed form: moves towards the edges in unison with glances (max 2.5px X, 2.0px Y).
+    /// In expanded form: tracks the cursor with maximum flexibility and agile responsiveness (max 3.5px X, 4.2px Y down, 2.4px Y up),
+    /// eagerly leading the gaze towards the cursor across the dashboard cards.
+    /// </summary>
+    private (double x, double y) CalculateEyeballOffset(double deltaX, double deltaY)
+    {
+        double maxEyeballX = IsExpanded ? 3.5 : 2.5;
+        double maxEyeballYUp = IsExpanded ? 2.4 : 1.8;
+        double maxEyeballYDown = IsExpanded ? 4.2 : 2.2;
+
+        double dist = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
+        if (dist < 0.1) return (0.0, 0.0);
+
+        double dirX = deltaX / dist;
+        double dirY = deltaY / dist;
+
+        // In expanded form, black eyeballs are extra agile and snappy (reach full deflection faster than the white eyes)
+        double reachDistance = IsExpanded ? 32.0 : 25.0;
+        double intensity = Math.Min(1.0, dist / reachDistance);
+
+        double maxEyeballY = dirY >= 0 ? maxEyeballYDown : maxEyeballYUp;
+
+        double targetX = dirX * maxEyeballX * intensity;
+        double targetY = dirY * maxEyeballY * intensity;
+
+        return (targetX, targetY);
+    }
+
+    /// <summary>
+    /// Periodic global cursor awareness and organic autonomous gaze behavior.
+    /// Reuses the existing 2–4 second glance timer with zero mouse hooks or continuous polling.
+    /// Samples GetCursorPos() periodically to gently glance toward user activity on the desktop,
+    /// while transitioning into relaxed autonomous glances when the mouse is inactive (8–12 seconds).
     /// </summary>
     private void TriggerGlance()
     {
-        if (_isTrackingCursor) return;
+        if (_isTrackingCursor || _currentMouthState == Orbit.Models.AgentState.Working) return;
 
-        int roll = _random.Next(100);
-        double targetX;
-        double targetY;
+        // Sample global cursor position via Win32 (sub-microsecond instantaneous check)
+        bool hasCursor = NativeMethods.GetCursorPos(out NativeMethods.POINT cursorPt);
 
-        if (roll < 42)
+        if (hasCursor)
         {
-            // 42% chance: Look straight ahead
-            targetX = 0.0;
-            targetY = 0.0;
+            int dx = Math.Abs(cursorPt.X - _lastSampledCursorPos.X);
+            int dy = Math.Abs(cursorPt.Y - _lastSampledCursorPos.Y);
+            if (dx > 6 || dy > 6)
+            {
+                _consecutiveInactiveTicks = 0;
+                _lastSampledCursorPos = cursorPt;
+            }
+            else
+            {
+                _consecutiveInactiveTicks++;
+            }
         }
-        else if (roll < 62)
+
+        // Mouse inactivity threshold: 3 consecutive ticks (~8–12 seconds) without movement
+        bool isMouseInactive = _consecutiveInactiveTicks >= 3;
+
+        double targetX = 0.0;
+        double targetY = 0.0;
+        TimeSpan animDuration = TimeSpan.FromMilliseconds(300);
+
+        if (hasCursor && !isMouseInactive && _random.Next(100) < 55)
         {
-            // 20% chance: Look left
-            targetX = -3.0 - (_random.NextDouble() * 1.0);
-            targetY = (_random.NextDouble() * 1.2) - 0.6;
-        }
-        else if (roll < 82)
-        {
-            // 20% chance: Look right
-            targetX = 3.0 + (_random.NextDouble() * 1.0);
-            targetY = (_random.NextDouble() * 1.2) - 0.6;
-        }
-        else if (roll < 92)
-        {
-            // 10% chance: Look slightly up
-            targetX = (_random.NextDouble() * 1.8) - 0.9;
-            targetY = -2.4 - (_random.NextDouble() * 0.8);
+            // --- 55% CHANCE: Organic glance toward user's desktop cursor activity ---
+            Point mascotScreenPos;
+            try
+            {
+                mascotScreenPos = IsLoaded && PresentationSource.FromVisual(this) != null
+                    ? PointToScreen(new Point(ActualWidth / 2.0, ActualHeight / 2.0))
+                    : new Point(SystemParameters.PrimaryScreenWidth / 2.0, 16.0);
+            }
+            catch
+            {
+                mascotScreenPos = new Point(SystemParameters.PrimaryScreenWidth / 2.0, 16.0);
+            }
+
+            double deltaX = cursorPt.X - mascotScreenPos.X;
+            double deltaY = cursorPt.Y - mascotScreenPos.Y;
+
+            // Clamped deflection toward cursor position
+            var (eyeX, eyeY) = CalculatePupilOffset(deltaX, deltaY);
+            var (ballX, ballY) = CalculateEyeballOffset(deltaX, deltaY);
+
+            // Subtle organic variation factor so gaze is alive and not robotic
+            double organicSoftness = 0.85 + (_random.NextDouble() * 0.15);
+            targetX = eyeX * organicSoftness;
+            targetY = eyeY * organicSoftness;
+
+            AnimatePupilsIndividual(
+                targetX, targetY, 
+                targetX, targetY, 
+                ballX * organicSoftness, ballY * organicSoftness, 
+                ballX * organicSoftness, ballY * organicSoftness, 
+                animDuration);
         }
         else
         {
-            // 8% chance: Look slightly down
-            targetX = (_random.NextDouble() * 1.8) - 0.9;
-            targetY = 1.4 + (_random.NextDouble() * 0.8);
+            // --- AUTONOMOUS RELAXED BEHAVIOR / INACTIVITY ---
+            // When mouse is inactive (>8–12s) or during natural idle variation:
+            // Relaxed casual glances around the desktop or resting neutral forward gaze
+            int roll = _random.Next(100);
+
+            if (roll < 45)
+            {
+                // 45% chance: Look straight ahead (centered neutral position)
+                targetX = 0.0;
+                targetY = 0.0;
+            }
+            else if (roll < 65)
+            {
+                // 20% chance: Look left (black eyeballs shift naturally towards the left edge)
+                targetX = -2.8 - (_random.NextDouble() * 0.8);
+                targetY = (_random.NextDouble() * 1.2) - 0.6;
+            }
+            else if (roll < 85)
+            {
+                // 20% chance: Look right (black eyeballs shift naturally towards the right edge)
+                targetX = 2.8 + (_random.NextDouble() * 0.8);
+                targetY = (_random.NextDouble() * 1.2) - 0.6;
+            }
+            else if (roll < 93)
+            {
+                // 8% chance: Look slightly up
+                targetX = (_random.NextDouble() * 1.6) - 0.8;
+                targetY = -2.0 - (_random.NextDouble() * 0.6);
+            }
+            else
+            {
+                // 7% chance: Look slightly down
+                targetX = (_random.NextDouble() * 1.6) - 0.8;
+                targetY = 1.4 + (_random.NextDouble() * 0.6);
+            }
+
+            AnimatePupilsIndividual(targetX, targetY, targetX, targetY, animDuration);
         }
 
-        AnimatePupilsIndividual(targetX, targetY, targetX, targetY, TimeSpan.FromMilliseconds(260));
-
-        // Randomize next glance interval
-        _glanceTimer.Interval = TimeSpan.FromSeconds(2.2 + (_random.NextDouble() * 2.8));
+        // Randomize next sampling / glance interval between 2.2s and 3.8s
+        _glanceTimer.Interval = TimeSpan.FromSeconds(2.2 + (_random.NextDouble() * 1.6));
     }
 
-    private void AnimatePupilsIndividual(double leftX, double leftY, double rightX, double rightY, TimeSpan duration)
+    private void AnimatePupilsIndividual(
+        double leftX, double leftY, 
+        double rightX, double rightY, 
+        double leftEyeballX, double leftEyeballY, 
+        double rightEyeballX, double rightEyeballY, 
+        TimeSpan duration)
     {
         var ease = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
@@ -295,6 +459,17 @@ public partial class EyeMascot : UserControl
         RightEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animRightX);
         RightEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animRightY);
 
+        // Black eyeballs deflection inside the white capsules
+        var animLeftPupilX = new DoubleAnimation(leftEyeballX, duration) { EasingFunction = ease };
+        var animLeftPupilY = new DoubleAnimation(leftEyeballY, duration) { EasingFunction = ease };
+        var animRightPupilX = new DoubleAnimation(rightEyeballX, duration) { EasingFunction = ease };
+        var animRightPupilY = new DoubleAnimation(rightEyeballY, duration) { EasingFunction = ease };
+
+        LeftPupilTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animLeftPupilX);
+        LeftPupilTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animLeftPupilY);
+        RightPupilTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animRightPupilX);
+        RightPupilTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animRightPupilY);
+
         // Move the mouth smoothly in unison with eye gaze so eyes never overlap the mouth
         double mouthTargetX = (leftX + rightX) * 0.5 * 0.70;
         double mouthTargetY = (leftY + rightY) * 0.5 * 0.55;
@@ -303,6 +478,19 @@ public partial class EyeMascot : UserControl
 
         MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animMouthX);
         MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animMouthY);
+    }
+
+    private void AnimatePupilsIndividual(double leftX, double leftY, double rightX, double rightY, TimeSpan duration)
+    {
+        // For idle glances: black eyeballs move towards the edges in the direction of the gaze
+        double factorX = 0.72;
+        double factorY = 0.80;
+        AnimatePupilsIndividual(
+            leftX, leftY, 
+            rightX, rightY, 
+            leftX * factorX, leftY * factorY, 
+            rightX * factorX, rightY * factorY, 
+            duration);
     }
 
     private void StartIdleGlow()
@@ -502,6 +690,7 @@ public partial class EyeMascot : UserControl
     {
         SetMouthExpression(state);
         ApplyEyeMicroInteractions(state);
+        VisualStateChanged?.Invoke(state);
     }
 
     private void ApplyEyeMicroInteractions(Orbit.Models.AgentState state)

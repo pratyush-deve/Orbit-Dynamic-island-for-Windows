@@ -66,36 +66,16 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
 
     /// <summary>
     /// Calculates the exact content-driven target height for the parent companion window.
-    /// Accounts for the Mascot, window frame margins, headers, cards, and buttons without clipping.
+    /// Matches the compact expanded height of the main companion dashboard.
     /// </summary>
     public double GetDesiredHeight()
     {
-        if (_stateManager == null) return DefaultWindowHeightCards;
+        return MainWindow.ExpandedHeight;
+    }
 
-        bool agRunning = _stateManager.AntigravitySession.IsProcessRunning;
-        bool ideRunning = _stateManager.AntigravityIdeSession.IsProcessRunning;
-
-        // When neither application is running, contract downward to the compact empty state
-        if (!agRunning && !ideRunning)
-        {
-            return MinWindowHeightEmpty;
-        }
-
-        // Measure actual content height dynamically with available width constraints
-        try
-        {
-            Measure(new Size(400, double.PositiveInfinity));
-            double measuredContentHeight = DesiredSize.Height;
-            if (measuredContentHeight > 40)
-            {
-                double calculatedTotal = Math.Ceiling(measuredContentHeight + WindowFramingOverhead);
-                // Return calculated height clamped to a comfortable, non-clipped minimum
-                return Math.Max(DefaultWindowHeightCards, calculatedTotal);
-            }
-        }
-        catch { }
-
-        return DefaultWindowHeightCards;
+    private void OnViewBackgroundMouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        e.Handled = true;
     }
 
     private void OnStateUpdated(AgentSessionInfo ag, AgentSessionInfo ide)
