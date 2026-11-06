@@ -14,8 +14,8 @@
         Topmost="True"
         ShowInTaskbar="False"
         ResizeMode="NoResize"
-        Width="140"
-        Height="56"
+        Width="160"
+        Height="38"
         SizeToContent="Manual"
         SnapsToDevicePixels="True"
         UseLayoutRounding="True"
@@ -24,22 +24,218 @@
         MouseMove="OnWindowMouseMove"
         MouseLeave="OnWindowMouseLeave">
 
-    <Grid x:Name="RootLayout" Background="Transparent">
+    <Grid x:Name="RootLayout" Background="{x:Null}">
         
-        <!-- STATE A: COLLAPSED (Pill with Eyes) -->
+        <!-- STATE A: COLLAPSED (Screen-Top Dynamic Island Notch) -->
         <Grid x:Name="CollapsedView"
               Opacity="1.0"
               Visibility="Visible"
               HorizontalAlignment="Stretch"
               VerticalAlignment="Stretch"
-              Background="Transparent"
+              Background="{x:Null}"
               Cursor="Hand"
               MouseLeftButtonDown="OnMascotClick">
-            
+
+            <!-- 1. Carved Notch Solid Dark Obsidian Glass Background -->
+            <Path x:Name="CollapsedNotchBg"
+                  Width="160"
+                  Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Top"
+                  Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
+
+            <!-- 1.5 Animated Binary Stream Overlay (Active Working state data flow, strictly clipped to notch silhouette) -->
+            <Canvas x:Name="BinaryStreamOverlay"
+                    Width="160" Height="38"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Opacity="0"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                <Canvas.Clip>
+                    <PathGeometry Figures="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
+                </Canvas.Clip>
+                <Canvas.Effect>
+                    <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.35"/>
+                </Canvas.Effect>
+
+                <!-- Left Column 1 (Outer Left) -->
+                <TextBlock Canvas.Left="27" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformL1"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" />
+                </TextBlock>
+
+                <!-- Left Column 2 (Mid Left) -->
+                <TextBlock Canvas.Left="39" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformL2"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#7C3AED" />
+                </TextBlock>
+
+                <!-- Left Column 3 (Inner Left, trailing) -->
+                <TextBlock Canvas.Left="51" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center" Opacity="0.55">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformL3"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#8B5CF6" /><LineBreak/>
+                    <Run Text="0" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="1" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#8B5CF6" /><LineBreak/>
+                    <Run Text="0" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="1" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" />
+                </TextBlock>
+
+                <!-- Right Column 3 (Inner Right, trailing) -->
+                <TextBlock Canvas.Left="105" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center" Opacity="0.55">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformR3"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="1" Foreground="#8B5CF6" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#8B5CF6" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" />
+                </TextBlock>
+
+                <!-- Right Column 2 (Mid Right) -->
+                <TextBlock Canvas.Left="117" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformR2"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="0" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="1" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="0" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="1" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="0" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="0" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="1" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="0" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="1" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="0" Foreground="#A855F7" />
+                </TextBlock>
+
+                <!-- Right Column 1 (Outer Right) -->
+                <TextBlock Canvas.Left="129" Canvas.Top="0"
+                           FontFamily="Consolas, Cascadia Code, Courier New"
+                           FontSize="7.5" FontWeight="SemiBold"
+                           LineStackingStrategy="BlockLineHeight" LineHeight="9"
+                           TextAlignment="Center">
+                    <TextBlock.RenderTransform>
+                        <TranslateTransform x:Name="StreamTransformR1"/>
+                    </TextBlock.RenderTransform>
+                    <Run Text="1" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="0" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="1" Foreground="#7C3AED" /><LineBreak/>
+                    <Run Text="0" Foreground="#E9D5FF" /><LineBreak/>
+                    <Run Text="0" Foreground="#6B46C1" /><LineBreak/>
+                    <Run Text="1" Foreground="#A855F7" /><LineBreak/>
+                    <Run Text="1" Foreground="#C084FC" /><LineBreak/>
+                    <Run Text="0" Foreground="#7C3AED" />
+                </TextBlock>
+            </Canvas>
+
+            <!-- 2. Subtle, Minimal Perimeter Outline (soft gradient descending from top bezel) -->
+            <Path x:Name="CollapsedNotchOutline"
+                  Width="160"
+                  StrokeThickness="1.0"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round"
+                  StrokeLineJoin="Round"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Top"
+                  Data="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#00A855F7" Offset="0.0"/>
+                        <GradientStop Color="#00A855F7" Offset="0.10"/>
+                        <GradientStop Color="#25A855F7" Offset="0.45"/>
+                        <GradientStop Color="#60A855F7" Offset="0.80"/>
+                        <GradientStop Color="#90C084FC" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+                <Path.Effect>
+                    <DropShadowEffect x:Name="CollapsedNotchGlow"
+                                      Color="{DynamicResource Color.Accent.PurpleLight}"
+                                      BlurRadius="5"
+                                      ShadowDepth="0"
+                                      Opacity="0.18"/>
+                </Path.Effect>
+            </Path>
+
+            <!-- 3. Mascot Eyes (Centered inside the carved notch cradle) -->
             <mascot:EyeMascot x:Name="PillMascot"
                               HorizontalAlignment="Center"
-                              VerticalAlignment="Center"
-                              IsHitTestVisible="False"/>
+                              VerticalAlignment="Top"
+                              Margin="0,1,0,0"
+                              IsHitTestVisible="False">
+                <mascot:EyeMascot.LayoutTransform>
+                    <ScaleTransform ScaleX="0.68" ScaleY="0.68"/>
+                </mascot:EyeMascot.LayoutTransform>
+            </mascot:EyeMascot>
         </Grid>
 
         <!-- STATE B: EXPANDED (Island Card) -->

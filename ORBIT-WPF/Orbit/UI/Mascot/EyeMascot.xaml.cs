@@ -20,17 +20,21 @@ public partial class EyeMascot : UserControl
     private static readonly System.Windows.Media.Color ColorWorking = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
     private static readonly System.Windows.Media.Color ColorCompleted = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
     private static readonly System.Windows.Media.Color ColorAttention = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+    private static readonly System.Windows.Media.Color ColorEyePurple = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+    private static readonly System.Windows.Media.Color ColorGlowPurple = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
+    private static readonly System.Windows.Media.Color ColorEyeWhite = System.Windows.Media.Colors.White;
 
     private static readonly System.Windows.Media.SolidColorBrush BrushWorkingBorder = new(ColorWorking);
     private static readonly System.Windows.Media.SolidColorBrush BrushCompletedBorder = new(ColorCompleted);
     private static readonly System.Windows.Media.SolidColorBrush BrushAttentionBorder = new(ColorAttention);
+    private static readonly System.Windows.Media.SolidColorBrush BrushWorkingMouth = new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E9D5FF"));
 
     // Expressions for ORBIT Mascot's tiny expressive mouth
-    private static readonly System.Windows.Media.Geometry GeometryMouthIdle = System.Windows.Media.Geometry.Parse("M 0,0 Q 5,2.5 10,0");
-    private static readonly System.Windows.Media.Geometry GeometryMouthWorking = System.Windows.Media.Geometry.Parse("M 0.5,1.2 L 9.5,1.2");
-    private static readonly System.Windows.Media.Geometry GeometryMouthError = System.Windows.Media.Geometry.Parse("M 0,2.5 Q 5,0.2 10,2.5");
-    private static readonly System.Windows.Media.Geometry GeometryMouthAttention = System.Windows.Media.Geometry.Parse("M 0,2 L 2.5,0.5 L 5,2.5 L 7.5,0.5 L 10,2");
-    private static readonly System.Windows.Media.Geometry GeometryMouthCompleted = System.Windows.Media.Geometry.Parse("M 0,0 Q 5.5,4 11,0");
+    private static readonly System.Windows.Media.Geometry GeometryMouthIdle = System.Windows.Media.Geometry.Parse("M 0,0 Q 4,2.2 8,0");
+    private static readonly System.Windows.Media.Geometry GeometryMouthWorking = System.Windows.Media.Geometry.Parse("M 0,2 L 8,2");
+    private static readonly System.Windows.Media.Geometry GeometryMouthError = System.Windows.Media.Geometry.Parse("M 0,2.5 Q 4,0.2 8,2.5");
+    private static readonly System.Windows.Media.Geometry GeometryMouthAttention = System.Windows.Media.Geometry.Parse("M 0,2 L 2,0.5 L 4,2 L 6,0.5 L 8,2");
+    private static readonly System.Windows.Media.Geometry GeometryMouthCompleted = System.Windows.Media.Geometry.Parse("M 0,0 Q 4,2.8 8,0");
 
     private Orbit.Models.AgentState _currentMouthState = Orbit.Models.AgentState.Idle;
 
@@ -42,6 +46,11 @@ public partial class EyeMascot : UserControl
 
     private bool _isGlowEnabled = true;
     private bool _isTrackingCursor = false;
+
+    /// <summary>
+    /// Pure facial features mascot component (eyes, purple iris glow, and tiny smile).
+    /// </summary>
+    public bool IsEmbeddedInNotch { get; set; } = true;
 
     private double _lastTargetLeftX = 0.0;
     private double _lastTargetLeftY = 0.0;
@@ -95,10 +104,6 @@ public partial class EyeMascot : UserControl
     public void SetGlowEnabled(bool enabled)
     {
         _isGlowEnabled = enabled;
-        if (PillGlow != null)
-        {
-            PillGlow.Opacity = enabled ? 0.5 : 0.0;
-        }
     }
 
     /// <summary>
@@ -107,6 +112,11 @@ public partial class EyeMascot : UserControl
     /// </summary>
     public void TriggerBlink(bool isDoubleBlink = false)
     {
+        if (_currentMouthState == Orbit.Models.AgentState.Working)
+        {
+            return; // Maintain rock-solid, focused concentration during active work
+        }
+
         var blinkAnimation = new DoubleAnimationUsingKeyFrames
         {
             Duration = TimeSpan.FromMilliseconds(180)
@@ -147,9 +157,9 @@ public partial class EyeMascot : UserControl
         _isTrackingCursor = true;
         _glanceTimer.Stop();
 
-        // Eye centres relative to EyeMascot surface (Left eye at ~28,24; Right eye at ~64,24)
-        var (leftX, leftY) = CalculatePupilOffset(cursorRelativeToMascot.X - 28.0, cursorRelativeToMascot.Y - 24.0);
-        var (rightX, rightY) = CalculatePupilOffset(cursorRelativeToMascot.X - 64.0, cursorRelativeToMascot.Y - 24.0);
+        // Eye centres relative to EyeMascot surface (Left eye at ~11,13; Right eye at ~43,13)
+        var (leftX, leftY) = CalculatePupilOffset(cursorRelativeToMascot.X - 11.0, cursorRelativeToMascot.Y - 13.0);
+        var (rightX, rightY) = CalculatePupilOffset(cursorRelativeToMascot.X - 43.0, cursorRelativeToMascot.Y - 13.0);
 
         if (wasIdle)
         {
@@ -202,8 +212,8 @@ public partial class EyeMascot : UserControl
     /// </summary>
     private static (double x, double y) CalculatePupilOffset(double deltaX, double deltaY)
     {
-        const double maxRadiusX = 4.5;
-        const double maxRadiusY = 5.2;
+        const double maxRadiusX = 4.0;
+        const double maxRadiusY = 2.6;
 
         double dist = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
         if (dist < 0.1) return (0.0, 0.0);
@@ -212,8 +222,8 @@ public partial class EyeMascot : UserControl
         double dirX = deltaX / dist;
         double dirY = deltaY / dist;
 
-        // Snappy distance response: reaches full gaze deflection within 35 DIPs
-        double intensity = Math.Min(1.0, dist / 35.0);
+        // Snappy distance response: reaches full gaze deflection within 30 DIPs
+        double intensity = Math.Min(1.0, dist / 30.0);
 
         // Elliptically clamped offsets
         double targetX = dirX * maxRadiusX * intensity;
@@ -242,26 +252,26 @@ public partial class EyeMascot : UserControl
         else if (roll < 62)
         {
             // 20% chance: Look left
-            targetX = -2.8 - (_random.NextDouble() * 1.4);
-            targetY = (_random.NextDouble() * 1.6) - 0.8;
+            targetX = -3.0 - (_random.NextDouble() * 1.0);
+            targetY = (_random.NextDouble() * 1.2) - 0.6;
         }
         else if (roll < 82)
         {
             // 20% chance: Look right
-            targetX = 2.8 + (_random.NextDouble() * 1.4);
-            targetY = (_random.NextDouble() * 1.6) - 0.8;
+            targetX = 3.0 + (_random.NextDouble() * 1.0);
+            targetY = (_random.NextDouble() * 1.2) - 0.6;
         }
         else if (roll < 92)
         {
             // 10% chance: Look slightly up
-            targetX = (_random.NextDouble() * 2.0) - 1.0;
-            targetY = -3.0 - (_random.NextDouble() * 1.4);
+            targetX = (_random.NextDouble() * 1.8) - 0.9;
+            targetY = -2.4 - (_random.NextDouble() * 0.8);
         }
         else
         {
             // 8% chance: Look slightly down
-            targetX = (_random.NextDouble() * 2.0) - 1.0;
-            targetY = 2.0 + (_random.NextDouble() * 1.6);
+            targetX = (_random.NextDouble() * 1.8) - 0.9;
+            targetY = 1.4 + (_random.NextDouble() * 0.8);
         }
 
         AnimatePupilsIndividual(targetX, targetY, targetX, targetY, TimeSpan.FromMilliseconds(260));
@@ -279,46 +289,33 @@ public partial class EyeMascot : UserControl
         var animRightX = new DoubleAnimation(rightX, duration) { EasingFunction = ease };
         var animRightY = new DoubleAnimation(rightY, duration) { EasingFunction = ease };
 
-        LeftPupilTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animLeftX);
-        LeftPupilTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animLeftY);
-        LeftCatchlightTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animLeftX);
-        LeftCatchlightTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animLeftY);
+        LeftEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animLeftX);
+        LeftEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animLeftY);
 
-        RightPupilTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animRightX);
-        RightPupilTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animRightY);
-        RightCatchlightTransform.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animRightX);
-        RightCatchlightTransform.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animRightY);
+        RightEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animRightX);
+        RightEyeTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animRightY);
+
+        // Move the mouth smoothly in unison with eye gaze so eyes never overlap the mouth
+        double mouthTargetX = (leftX + rightX) * 0.5 * 0.70;
+        double mouthTargetY = (leftY + rightY) * 0.5 * 0.55;
+        var animMouthX = new DoubleAnimation(mouthTargetX, duration) { EasingFunction = ease };
+        var animMouthY = new DoubleAnimation(mouthTargetY, duration) { EasingFunction = ease };
+
+        MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.XProperty, animMouthX);
+        MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animMouthY);
     }
 
     private void StartIdleGlow()
     {
-        if (!_isGlowEnabled || PillGlow == null) return;
-
-        PillGlow.Color = ColorIdle;
-        PillGlow.BlurRadius = 16.0;
-        PillBorder?.SetResourceReference(Border.BorderBrushProperty, "Brush.Gradient.PillBorder");
-
-        var glowAnimation = new DoubleAnimation
-        {
-            From = 0.30,
-            To = 0.60,
-            Duration = TimeSpan.FromSeconds(2.5),
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever,
-            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
-        };
-
-        PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, glowAnimation);
+        // Standalone facial features: glow is managed by the surrounding notch container
     }
 
     /// <summary>
-    /// Updates the mascot eye and pill visual state according to real-time AI agent status.
-    /// Manages high-visibility Working and Completed glow effects with 15–20s DONE persistence.
+    /// Updates the mascot eye visual state according to real-time AI agent status.
+    /// Manages Working eye rings, Completed smiling eyes, and 15–20s DONE persistence.
     /// </summary>
     public void SetAiState(Orbit.Models.AgentState state, string message = "")
     {
-        if (PillGlow == null) return;
-
         var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
 
         // Handle Attention Badge (!)
@@ -504,89 +501,163 @@ public partial class EyeMascot : UserControl
     private void ApplyVisualState(Orbit.Models.AgentState state)
     {
         SetMouthExpression(state);
+        ApplyEyeMicroInteractions(state);
+    }
 
-        if (PillGlow == null) return;
+    private void ApplyEyeMicroInteractions(Orbit.Models.AgentState state)
+    {
+        if (LeftSmilingEye == null || RightSmilingEye == null ||
+            LeftEyePill == null || RightEyePill == null)
+        {
+            return;
+        }
 
-        var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
+        var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
 
         switch (state)
         {
             case Orbit.Models.AgentState.Working:
-                // WORKING (#C084FC): High-intensity neon purple pulse, large blur halo, border illuminated
-                PillGlow.Color = ColorWorking;
-                PillGlow.BlurRadius = 26.0;
-                PillBorder?.SetValue(Border.BorderBrushProperty, BrushWorkingBorder);
+            {
+                // WORKING: Determined focused eye expression (narrowed, inward-angled upper lid) with vibrant neon purple glow
+                _glanceTimer.Stop();
+                AnimatePupilsIndividual(0.0, 0.0, 0.0, 0.0, TimeSpan.FromMilliseconds(180));
 
-                if (_isGlowEnabled)
+                LeftSmilingEye.BeginAnimation(OpacityProperty, null);
+                RightSmilingEye.BeginAnimation(OpacityProperty, null);
+                LeftSmilingEye.Opacity = 0.0;
+                RightSmilingEye.Opacity = 0.0;
+
+                // Hide relaxed normal pill eyes
+                var pillFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150)) { EasingFunction = fadeEase };
+                LeftEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+                RightEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+
+                // Reveal focused working eyes
+                if (LeftWorkingEye != null && RightWorkingEye != null)
                 {
-                    var workAnim = new DoubleAnimation
+                    var workingFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = fadeEase };
+                    LeftWorkingEye.BeginAnimation(OpacityProperty, workingFadeIn);
+                    RightWorkingEye.BeginAnimation(OpacityProperty, workingFadeIn);
+
+                    // Subtle, premium glow breathing pulse on drop shadow
+                    var glowPulse = new DoubleAnimation
                     {
-                        From = 0.65,
-                        To = 1.0,
-                        Duration = TimeSpan.FromSeconds(1.3),
+                        From = 10.0,
+                        To = 14.0,
+                        Duration = TimeSpan.FromMilliseconds(1200),
                         AutoReverse = true,
                         RepeatBehavior = RepeatBehavior.Forever,
-                        EasingFunction = colorEase
+                        EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
                     };
-                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
+                    LeftWorkingGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, glowPulse);
+                    RightWorkingGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, glowPulse);
                 }
+
+                // Concentrated flat horizontal mouth stroke
+                if (MouthPath != null) MouthPath.Stroke = BrushWorkingMouth;
                 break;
+            }
 
             case Orbit.Models.AgentState.Completed:
-                // DONE (#10B981): Commanding emerald green glow, high opacity, large blur halo
-                PillGlow.Color = ColorCompleted;
-                PillGlow.BlurRadius = 28.0;
-                PillBorder?.SetValue(Border.BorderBrushProperty, BrushCompletedBorder);
+            {
+                // COMPLETED: Smiling eye arches (◠ ◠) in emerald green (#10B981) + uplifted friendly green smile
+                StopEyeRings();
+                ResetWorkingEyeState();
 
-                if (_isGlowEnabled)
-                {
-                    var doneAnim = new DoubleAnimation
-                    {
-                        From = 0.70,
-                        To = 1.0,
-                        Duration = TimeSpan.FromSeconds(1.5),
-                        AutoReverse = true,
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        EasingFunction = colorEase
-                    };
-                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
-                }
+                var pillFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = fadeEase };
+                LeftEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+                RightEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+
+                var smileFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(220)) { EasingFunction = fadeEase };
+                LeftSmilingEye.BeginAnimation(OpacityProperty, smileFadeIn);
+                RightSmilingEye.BeginAnimation(OpacityProperty, smileFadeIn);
+
+                // Uplift mouth slightly in Done state
+                MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, new DoubleAnimation(-4.0, TimeSpan.FromMilliseconds(200)) { EasingFunction = fadeEase });
+
+                if (MouthPath != null) MouthPath.Stroke = BrushCompletedBorder;
                 break;
+            }
 
             case Orbit.Models.AgentState.Attention:
-                // ATTENTION (#EF4444): Red indicator
-                PillGlow.Color = ColorAttention;
-                PillGlow.BlurRadius = 20.0;
-                PillBorder?.SetValue(Border.BorderBrushProperty, BrushAttentionBorder);
-
-                if (_isGlowEnabled)
-                {
-                    var attnAnim = new DoubleAnimation
-                    {
-                        From = 0.50,
-                        To = 0.85,
-                        Duration = TimeSpan.FromSeconds(1.0),
-                        AutoReverse = true,
-                        RepeatBehavior = RepeatBehavior.Forever,
-                        EasingFunction = colorEase
-                    };
-                    PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
-                }
-                break;
-
             case Orbit.Models.AgentState.Error:
-                // ERROR (#EF4444): Red indicator
-                PillGlow.Color = ColorAttention;
-                PillGlow.BlurRadius = 20.0;
-                PillBorder?.SetValue(Border.BorderBrushProperty, BrushAttentionBorder);
-                PillGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
-                PillGlow.Opacity = _isGlowEnabled ? 0.85 : 0.0;
+            {
+                // ATTENTION / ERROR: Normal eyes with red attention badge/glow
+                StopEyeRings();
+                ResetWorkingEyeState();
+                RestoreNormalEyes();
+                if (MouthPath != null) MouthPath.Stroke = System.Windows.Media.Brushes.White;
                 break;
+            }
 
             default:
-                // IDLE (#A855F7): Subtle breathing purple glow
-                StartIdleGlow();
+            {
+                // IDLE: Standard expressive white eyes, gentle smile, organic glance
+                StopEyeRings();
+                ResetWorkingEyeState();
+                RestoreNormalEyes();
+                if (MouthPath != null) MouthPath.Stroke = System.Windows.Media.Brushes.White;
+                if (!_isTrackingCursor)
+                {
+                    _glanceTimer.Start();
+                }
                 break;
+            }
         }
+    }
+
+    private void StopEyeRings()
+    {
+    }
+
+    private void RestoreNormalEyes()
+    {
+        if (LeftSmilingEye == null || RightSmilingEye == null ||
+            LeftEyePill == null || RightEyePill == null) return;
+
+        LeftSmilingEye.BeginAnimation(OpacityProperty, null);
+        RightSmilingEye.BeginAnimation(OpacityProperty, null);
+        LeftSmilingEye.Opacity = 0.0;
+        RightSmilingEye.Opacity = 0.0;
+
+        if (LeftWorkingEye != null)
+        {
+            LeftWorkingEye.BeginAnimation(OpacityProperty, null);
+            LeftWorkingEye.Opacity = 0.0;
+        }
+        if (RightWorkingEye != null)
+        {
+            RightWorkingEye.BeginAnimation(OpacityProperty, null);
+            RightWorkingEye.Opacity = 0.0;
+        }
+
+        var pillFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(200));
+        LeftEyePill.BeginAnimation(OpacityProperty, pillFadeIn);
+        RightEyePill.BeginAnimation(OpacityProperty, pillFadeIn);
+    }
+
+    private void ResetWorkingEyeState()
+    {
+        // Stop pulse animation and fade out working eyes
+        if (LeftWorkingEye != null && RightWorkingEye != null)
+        {
+            LeftWorkingEye.BeginAnimation(OpacityProperty, null);
+            RightWorkingEye.BeginAnimation(OpacityProperty, null);
+            LeftWorkingEye.Opacity = 0.0;
+            RightWorkingEye.Opacity = 0.0;
+
+            LeftWorkingGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, null);
+            RightWorkingGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.BlurRadiusProperty, null);
+        }
+
+        // Smoothly restore eye colors to normal white
+        var whiteColorAnim = new ColorAnimation(ColorEyeWhite, TimeSpan.FromMilliseconds(200));
+        LeftEyeBrush?.BeginAnimation(System.Windows.Media.SolidColorBrush.ColorProperty, whiteColorAnim);
+        RightEyeBrush?.BeginAnimation(System.Windows.Media.SolidColorBrush.ColorProperty, whiteColorAnim);
+        LeftEyeGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.ColorProperty, whiteColorAnim);
+        RightEyeGlow?.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.ColorProperty, whiteColorAnim);
+
+        // Reset any mouth uplift animation
+        MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
     }
 }

@@ -4,160 +4,179 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              mc:Ignorable="d" 
-             d:DesignHeight="60" d:DesignWidth="140"
+             d:DesignHeight="32" d:DesignWidth="60"
              HorizontalAlignment="Center" VerticalAlignment="Center">
 
-    <Grid x:Name="MascotContainer">
-        <!-- Optional outer glow effect applied directly to the pill -->
-        <Border x:Name="PillBorder"
-                Background="{DynamicResource Brush.Gradient.CharcoalSurface}"
-                BorderBrush="{DynamicResource Brush.Gradient.PillBorder}"
-                BorderThickness="1.5"
-                CornerRadius="24"
-                Padding="16,10"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center">
+    <!-- Mascot Face Surface (Pure cyber-companion: Two glowing white capsule eyes + cute smile) -->
+    <Grid x:Name="MascotContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Eyes Row -->
+            <RowDefinition Height="Auto"/>
+            <!-- Row 1: Cute Smile -->
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Left & Right Eyes -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
             
-            <Border.Effect>
-                <DropShadowEffect x:Name="PillGlow"
-                                  Color="{DynamicResource Color.Accent.PurpleLight}"
-                                  BlurRadius="16"
-                                  ShadowDepth="0"
-                                  Opacity="0.5"/>
-            </Border.Effect>
+            <!-- Left Eye Container -->
+            <Grid Width="20" Height="26" Margin="0,0,8,0">
+                <!-- Group Transform: Gaze Translation & Blinking Scale -->
+                <Grid.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="LeftEyeScale" CenterX="10" CenterY="13"/>
+                        <TranslateTransform x:Name="LeftEyeTransform"/>
+                    </TransformGroup>
+                </Grid.RenderTransform>
 
-            <!-- Mascot Face Surface (Eyes + Tiny Animated Mouth) -->
-            <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                <Grid.RowDefinitions>
-                    <!-- Row 0: Eyes Row -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- Row 1: Tiny Mouth -->
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+                <!-- 1. Left Glowing Capsule Eye (Idle / Normal) -->
+                <Border x:Name="LeftEyePill"
+                        Width="14" Height="22"
+                        CornerRadius="7"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <Border.Background>
+                        <SolidColorBrush x:Name="LeftEyeBrush" Color="#FFFFFF"/>
+                    </Border.Background>
+                    <Border.RenderTransform>
+                        <RotateTransform Angle="3.5" CenterX="7" CenterY="11"/>
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect x:Name="LeftEyeGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Border.Effect>
+                </Border>
 
-                <!-- Left & Right Eyes -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <!-- Left Eye -->
-                    <Grid Width="24" Height="28" Margin="0,0,12,0">
-                        <Grid.RenderTransform>
-                            <ScaleTransform x:Name="LeftEyeScale" CenterX="12" CenterY="14"/>
-                        </Grid.RenderTransform>
-
-                        <!-- Left Sclera -->
-                        <Border CornerRadius="12"
-                                Background="{DynamicResource Brush.Eye.Sclera}">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
-                            </Border.Effect>
-
-                            <!-- Left Pupil Container (Clipped to Sclera) -->
-                            <Grid ClipToBounds="True">
-                                <Ellipse x:Name="LeftPupil"
-                                         Width="13" Height="15"
-                                         Fill="{DynamicResource Brush.Eye.Pupil}"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="LeftPupilTransform"/>
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-
-                                <!-- Left Specular Catchlight (Eye sparkle) -->
-                                <Ellipse Width="4" Height="4"
-                                         Fill="{DynamicResource Brush.Eye.Highlight}"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center"
-                                         Margin="4,-4,0,0">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="LeftCatchlightTransform"/>
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Grid>
-                        </Border>
-                    </Grid>
-
-                    <!-- Right Eye -->
-                    <Grid Width="24" Height="28">
-                        <Grid.RenderTransform>
-                            <ScaleTransform x:Name="RightEyeScale" CenterX="12" CenterY="14"/>
-                        </Grid.RenderTransform>
-
-                        <!-- Right Sclera -->
-                        <Border CornerRadius="12"
-                                Background="{DynamicResource Brush.Eye.Sclera}">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="4" ShadowDepth="1" Color="#000000" Opacity="0.15"/>
-                            </Border.Effect>
-
-                            <!-- Right Pupil Container (Clipped to Sclera) -->
-                            <Grid ClipToBounds="True">
-                                <Ellipse x:Name="RightPupil"
-                                         Width="13" Height="15"
-                                         Fill="{DynamicResource Brush.Eye.Pupil}"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="RightPupilTransform"/>
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-
-                                <!-- Right Specular Catchlight (Eye sparkle) -->
-                                <Ellipse Width="4" Height="4"
-                                         Fill="{DynamicResource Brush.Eye.Highlight}"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center"
-                                         Margin="4,-4,0,0">
-                                    <Ellipse.RenderTransform>
-                                        <TranslateTransform x:Name="RightCatchlightTransform"/>
-                                    </Ellipse.RenderTransform>
-                                </Ellipse>
-                            </Grid>
-                        </Border>
-                    </Grid>
-                </StackPanel>
-
-                <!-- Tiny Expressive Mouth -->
-                <Path x:Name="MouthPath"
-                      Grid.Row="1"
+                <!-- 2. Left Focused Working Eye (Determined AI companion concentrating) -->
+                <Path x:Name="LeftWorkingEye"
+                      Data="M 5,6.5 C 3.8,6.5 3,7.5 3,9.5 L 3,17 C 3,19 4,20.5 6,20.5 L 14,20.5 C 16,20.5 17,19 17,17 L 17,10.5 C 17,9 16.2,8.2 15,8.2 L 5,6.5 Z"
+                      Fill="#C084FC"
                       HorizontalAlignment="Center"
                       VerticalAlignment="Center"
-                      Stroke="#FFFFFF"
-                      StrokeThickness="1.2"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect x:Name="LeftWorkingGlow" Color="#C084FC" BlurRadius="12" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
+                </Path>
+
+                <!-- 3. Left Smiling Eye Arch (Completed State: ◠) - Uplifted & slightly larger -->
+                <Path x:Name="LeftSmilingEye"
+                      Data="M 0,13 Q 9,0 18,13"
+                      Stroke="#10B981"
+                      StrokeThickness="3.2"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
-                      StrokeLineJoin="Round"
-                      Margin="0,2,0,-2"
-                      Opacity="0.85"
-                      SnapsToDevicePixels="True"
-                      RenderTransformOrigin="0.5,0.5">
-                    <Path.RenderTransform>
-                        <ScaleTransform x:Name="MouthScale" CenterX="5" CenterY="1" ScaleX="1.0" ScaleY="1.0"/>
-                    </Path.RenderTransform>
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Top"
+                      Margin="0,1,0,0"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect Color="#10B981" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
                 </Path>
             </Grid>
-        </Border>
 
-        <!-- Tiny red circular exclamation badge (!) attached to top-right corner of mascot -->
+            <!-- Right Eye Container -->
+            <Grid Width="20" Height="26">
+                <!-- Group Transform: Gaze Translation & Blinking Scale -->
+                <Grid.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="RightEyeScale" CenterX="10" CenterY="13"/>
+                        <TranslateTransform x:Name="RightEyeTransform"/>
+                    </TransformGroup>
+                </Grid.RenderTransform>
+
+                <!-- 1. Right Glowing Capsule Eye (Idle / Normal) -->
+                <Border x:Name="RightEyePill"
+                        Width="14" Height="22"
+                        CornerRadius="7"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                    <Border.Background>
+                        <SolidColorBrush x:Name="RightEyeBrush" Color="#FFFFFF"/>
+                    </Border.Background>
+                    <Border.RenderTransform>
+                        <RotateTransform Angle="-3.5" CenterX="7" CenterY="11"/>
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect x:Name="RightEyeGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Border.Effect>
+                </Border>
+
+                <!-- 2. Right Focused Working Eye (Determined AI companion concentrating) -->
+                <Path x:Name="RightWorkingEye"
+                      Data="M 15,6.5 C 16.2,6.5 17,7.5 17,9.5 L 17,17 C 17,19 16,20.5 14,20.5 L 6,20.5 C 4,20.5 3,19 3,17 L 3,10.5 C 3,9 3.8,8.2 5,8.2 L 15,6.5 Z"
+                      Fill="#C084FC"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect x:Name="RightWorkingGlow" Color="#C084FC" BlurRadius="12" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
+                </Path>
+
+                <!-- 3. Right Smiling Eye Arch (Completed State: ◠) - Uplifted & slightly larger -->
+                <Path x:Name="RightSmilingEye"
+                      Data="M 0,13 Q 9,0 18,13"
+                      Stroke="#10B981"
+                      StrokeThickness="3.2"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Top"
+                      Margin="0,1,0,0"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect Color="#10B981" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
+                </Path>
+            </Grid>
+        </StackPanel>
+
+        <!-- Cute Curved Smile Beneath Eyes -->
+        <Path x:Name="MouthPath"
+              Grid.Row="1"
+              Data="M 0,0 Q 4,2.5 8,0"
+              HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Stroke="#FFFFFF"
+              StrokeThickness="1.8"
+              StrokeStartLineCap="Round"
+              StrokeEndLineCap="Round"
+              StrokeLineJoin="Round"
+              Margin="0,-2,0,0"
+              Opacity="1.0"
+              SnapsToDevicePixels="True"
+              RenderTransformOrigin="0.5,0.5">
+            <Path.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="MouthScale" CenterX="4" CenterY="1" ScaleX="1.0" ScaleY="1.0"/>
+                    <TranslateTransform x:Name="MouthTransform"/>
+                </TransformGroup>
+            </Path.RenderTransform>
+        </Path>
+
+        <!-- Tiny red circular exclamation badge (!) for Attention/Error -->
         <Border x:Name="AttentionBadge"
-                Width="14" Height="14"
-                CornerRadius="7"
+                Grid.Row="0"
+                Width="12" Height="12"
+                CornerRadius="6"
                 Background="#EF4444"
                 BorderBrush="#FFFFFF"
                 BorderThickness="1.2"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                Margin="0,2,6,0"
+                Margin="0,-2,-4,0"
                 Visibility="Collapsed"
                 Opacity="0"
                 IsHitTestVisible="False">
             <Border.RenderTransform>
-                <ScaleTransform x:Name="AttentionBadgeScale" CenterX="7" CenterY="7" ScaleX="1" ScaleY="1"/>
+                <ScaleTransform x:Name="AttentionBadgeScale" CenterX="6" CenterY="6" ScaleX="1" ScaleY="1"/>
             </Border.RenderTransform>
             <Border.Effect>
                 <DropShadowEffect Color="#EF4444" BlurRadius="6" ShadowDepth="0" Opacity="0.9"/>
             </Border.Effect>
             <TextBlock Text="!" 
-                       FontSize="9" 
+                       FontSize="8" 
                        FontWeight="Bold" 
                        Foreground="#FFFFFF" 
                        HorizontalAlignment="Center" 

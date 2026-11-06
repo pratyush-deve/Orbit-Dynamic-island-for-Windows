@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Orbit.Core;
 using Orbit.Integrations.Desktop;
@@ -136,6 +137,14 @@ public partial class ExpandedIsland : UserControl
 
         CardWork.Click += OnCardWorkClicked;
         CardWork.MouseLeftButtonUp += (s, e) => OnCardWorkClicked(s, e);
+
+        Loaded += (s, e) =>
+        {
+            IslandMascot.IsEmbeddedInNotch = true;
+            UpdateIslandFrameGeometry(RootIsland.ActualWidth, RootIsland.ActualHeight);
+            UpdateParentIslandGlowState(Orbit.Models.AgentState.Idle);
+        };
+        RootIsland.SizeChanged += (s, e) => UpdateIslandFrameGeometry(e.NewSize.Width, e.NewSize.Height);
     }
 
     public void Initialize(
@@ -180,7 +189,11 @@ public partial class ExpandedIsland : UserControl
         {
             attentionManager.MascotStateChanged += (state, msg) =>
             {
-                Dispatcher.Invoke(() => IslandMascot.SetAiState(state, msg));
+                Dispatcher.Invoke(() =>
+                {
+                    IslandMascot.SetAiState(state, msg);
+                    UpdateParentIslandGlowState(state);
+                });
             };
         }
     }
@@ -189,6 +202,177 @@ public partial class ExpandedIsland : UserControl
     {
         _glowEnabled = enabled;
         IslandMascot.SetGlowEnabled(enabled);
+        UpdateParentIslandGlowState(Orbit.Models.AgentState.Idle);
+    }
+
+    /// <summary>
+    /// Generates dynamic StreamGeometry for the screen-top Dynamic Island notch parent window contour.
+    /// Perfectly traces the left shoulder, central notch cradle holding the mascot, right shoulder,
+    /// and rounded perimeter corners with hardware-accelerated direct rendering.
+    /// </summary>
+    private void UpdateIslandFrameGeometry(double width, double height)
+    {
+        if (width < 60 || height < 60) return;
+
+        const double marginX = 8.0;
+        const double marginTop = 2.0;
+        const double marginBottom = 8.0;
+
+        double left = marginX;
+        double top = marginTop;
+        double right = width - marginX;
+        double bottom = height - marginBottom;
+        double cardW = right - left;
+        double cardH = bottom - top;
+
+        double r = Math.Min(22.0, Math.Min(cardW / 4.0, cardH / 4.0));
+        double cx = left + (cardW / 2.0);
+
+        // Dynamic Island notch parameters
+        double notchHalfW = Math.Min(88.0, (cardW / 2.0) - r - 20.0);
+        double notchDepth = Math.Min(36.0, cardH / 4.0);
+        double curveW = Math.Min(42.0, notchHalfW * 0.48);
+
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            // Start at top edge just past top-left corner fillet
+            ctx.BeginFigure(new Point(left + r, top), isFilled: true, isClosed: true);
+
+            // Left shoulder (horizontal line towards center)
+            ctx.LineTo(new Point(cx - notchHalfW, top), isStroked: true, isSmoothJoin: true);
+
+            // Concave S-curve dipping smoothly down into the central notch
+            ctx.BezierTo(
+                new Point(cx - notchHalfW + (curveW * 0.42), top),
+                new Point(cx - notchHalfW + (curveW * 0.58), top + notchDepth),
+                new Point(cx - notchHalfW + curveW, top + notchDepth),
+                isStroked: true, isSmoothJoin: true);
+
+            // Notch cradle floor (supporting the mascot eyes)
+            ctx.LineTo(new Point(cx + notchHalfW - curveW, top + notchDepth), isStroked: true, isSmoothJoin: true);
+
+            // Concave S-curve rising smoothly up to the right shoulder
+            ctx.BezierTo(
+                new Point(cx + notchHalfW - (curveW * 0.58), top + notchDepth),
+                new Point(cx + notchHalfW - (curveW * 0.42), top),
+                new Point(cx + notchHalfW, top),
+                isStroked: true, isSmoothJoin: true);
+
+            // Right shoulder (horizontal line towards top-right corner)
+            ctx.LineTo(new Point(right - r, top), isStroked: true, isSmoothJoin: true);
+
+            // Top-right corner arc
+            ctx.ArcTo(new Point(right, top + r), new System.Windows.Size(r, r), 0, false, SweepDirection.Clockwise, isStroked: true, isSmoothJoin: true);
+
+            // Right perimeter edge
+            ctx.LineTo(new Point(right, bottom - r), isStroked: true, isSmoothJoin: true);
+
+            // Bottom-right corner arc
+            ctx.ArcTo(new Point(right - r, bottom), new System.Windows.Size(r, r), 0, false, SweepDirection.Clockwise, isStroked: true, isSmoothJoin: true);
+
+            // Bottom perimeter edge
+            ctx.LineTo(new Point(left + r, bottom), isStroked: true, isSmoothJoin: true);
+
+            // Bottom-left corner arc
+            ctx.ArcTo(new Point(left, bottom - r), new System.Windows.Size(r, r), 0, false, SweepDirection.Clockwise, isStroked: true, isSmoothJoin: true);
+
+            // Left perimeter edge
+            ctx.LineTo(new Point(left, top + r), isStroked: true, isSmoothJoin: true);
+
+            // Top-left corner arc
+            ctx.ArcTo(new Point(left + r, top), new System.Windows.Size(r, r), 0, false, SweepDirection.Clockwise, isStroked: true, isSmoothJoin: true);
+        }
+        geometry.Freeze();
+        IslandFramePath.Data = geometry;
+
+        // Dynamic Island notch accent shelf (subtle glowing rim highlight under the notch cradle)
+        var accentGeom = new StreamGeometry();
+        using (var actx = accentGeom.Open())
+        {
+            actx.BeginFigure(new Point(cx - notchHalfW + curveW + 4.0, top + notchDepth + 2.0), isFilled: false, isClosed: false);
+            actx.QuadraticBezierTo(
+                new Point(cx, top + notchDepth + 4.0),
+                new Point(cx + notchHalfW - curveW - 4.0, top + notchDepth + 2.0),
+                isStroked: true, isSmoothJoin: true);
+        }
+        accentGeom.Freeze();
+        NotchAccentPath.Data = accentGeom;
+    }
+
+    private void UpdateParentIslandGlowState(Orbit.Models.AgentState state)
+    {
+        if (IslandGlow == null) return;
+        var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
+
+        switch (state)
+        {
+            case Orbit.Models.AgentState.Working:
+                IslandGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
+                IslandGlow.BlurRadius = 32.0;
+                if (_glowEnabled)
+                {
+                    var workAnim = new DoubleAnimation(0.5, 0.85, TimeSpan.FromSeconds(1.3))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    IslandGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
+                }
+                break;
+
+            case Orbit.Models.AgentState.Completed:
+                IslandGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
+                IslandGlow.BlurRadius = 32.0;
+                if (_glowEnabled)
+                {
+                    var doneAnim = new DoubleAnimation(0.55, 0.85, TimeSpan.FromSeconds(1.5))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    IslandGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
+                }
+                break;
+
+            case Orbit.Models.AgentState.Attention:
+            case Orbit.Models.AgentState.Error:
+                IslandGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+                IslandGlow.BlurRadius = 26.0;
+                if (_glowEnabled)
+                {
+                    var attnAnim = new DoubleAnimation(0.4, 0.75, TimeSpan.FromSeconds(1.0))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    IslandGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
+                }
+                break;
+
+            default:
+                IslandGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+                IslandGlow.BlurRadius = 28.0;
+                if (_glowEnabled)
+                {
+                    var idleAnim = new DoubleAnimation(0.35, 0.55, TimeSpan.FromSeconds(2.5))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    IslandGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, idleAnim);
+                }
+                else
+                {
+                    IslandGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
+                    IslandGlow.Opacity = 0.0;
+                }
+                break;
+        }
     }
 
     public void SetBodyOpacity(double opacity)

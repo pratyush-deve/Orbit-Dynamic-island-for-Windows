@@ -24,13 +24,13 @@ public partial class MainWindow : Window
     private const string LogCategory = "MAIN_WINDOW";
 
     // Standard dimensions (DIPs)
-    public const double CollapsedWidth = 140.0;
-    public const double CollapsedHeight = 56.0;
+    public const double CollapsedWidth = 160.0;
+    public const double CollapsedHeight = 38.0;
     public const double ExpandedWidth = 440.0;
     public const double ExpandedHeight = 266.0;
     public const double NotesWidth = 500.0;
     public const double NotesHeight = 380.0;
-    public const double TopMargin = 14.0;
+    public const double TopMargin = 0.0;
 
     private readonly IMonitorService _monitorService;
     private readonly ISettingsService _settingsService;
@@ -112,6 +112,9 @@ public partial class MainWindow : Window
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Embed compact mascot eyes seamlessly inside the carved notch cutout
+        PillMascot.IsEmbeddedInNotch = true;
+
         // Anchor window to top-center of primary monitor
         PositionAtTopCenter(CollapsedWidth);
 
@@ -119,6 +122,7 @@ public partial class MainWindow : Window
         var glow = _settingsService.CurrentSettings.EyeGlowEnabled;
         PillMascot.SetGlowEnabled(glow);
         IslandPanel.SetGlowStatus(glow);
+        UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
 
         // Initialize active apps manager, system controls, dev workspace, AI agent monitor, social/work hubs, and responsive height changes
         IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService, _notesService);
@@ -129,7 +133,11 @@ public partial class MainWindow : Window
         {
             _attentionManager.MascotStateChanged += (state, msg) =>
             {
-                Dispatcher.Invoke(() => PillMascot.SetAiState(state, msg));
+                Dispatcher.Invoke(() =>
+                {
+                    PillMascot.SetAiState(state, msg);
+                    UpdateCompactNotchGlow(state);
+                });
             };
         }
 
@@ -309,6 +317,8 @@ public partial class MainWindow : Window
 
                 case CompanionState.Collapsed:
                     Show();
+                    PillMascot.IsEmbeddedInNotch = true;
+                    UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
                     IslandPanel.ResetToHomeView();
                     _overlayService.BringToFront(_hwnd);
                     break;
@@ -461,6 +471,8 @@ public partial class MainWindow : Window
 
                 CollapsedView.Visibility = Visibility.Visible;
                 ExpandedView.Visibility = Visibility.Collapsed;
+                PillMascot.IsEmbeddedInNotch = true;
+                UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
                 IslandPanel.ResetToHomeView();
 
                 _lifecycleService.SetState(CompanionState.Collapsed);
@@ -489,6 +501,151 @@ public partial class MainWindow : Window
     {
         PillMascot.SetGlowEnabled(enabled);
         _settingsService.UpdateEyeGlow(enabled);
+        UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
+    }
+
+    /// <summary>
+    /// Updates the compact screen-top carved notch perimeter glow according to real-time AI status.
+    /// Perfectly synchronizes the glowing purple, emerald green, and alert red micro-interactions.
+    /// </summary>
+    private void UpdateCompactNotchGlow(Orbit.Models.AgentState state)
+    {
+        if (CollapsedNotchGlow == null) return;
+        var colorEase = new SineEase { EasingMode = EasingMode.EaseInOut };
+        bool glowEnabled = _settingsService.CurrentSettings.EyeGlowEnabled;
+
+        switch (state)
+        {
+            case Orbit.Models.AgentState.Working:
+                StartBinaryStreamAnimation();
+                CollapsedNotchGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
+                CollapsedNotchGlow.BlurRadius = 10.0;
+                if (glowEnabled)
+                {
+                    var workAnim = new DoubleAnimation(0.20, 0.40, TimeSpan.FromSeconds(1.3))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    CollapsedNotchGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, workAnim);
+                }
+                break;
+
+            case Orbit.Models.AgentState.Completed:
+                StopBinaryStreamAnimation();
+                CollapsedNotchGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
+                CollapsedNotchGlow.BlurRadius = 10.0;
+                if (glowEnabled)
+                {
+                    var doneAnim = new DoubleAnimation(0.25, 0.45, TimeSpan.FromSeconds(1.5))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    CollapsedNotchGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, doneAnim);
+                }
+                break;
+
+            case Orbit.Models.AgentState.Attention:
+            case Orbit.Models.AgentState.Error:
+                StopBinaryStreamAnimation();
+                CollapsedNotchGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#EF4444");
+                CollapsedNotchGlow.BlurRadius = 10.0;
+                if (glowEnabled)
+                {
+                    var attnAnim = new DoubleAnimation(0.25, 0.45, TimeSpan.FromSeconds(1.0))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    CollapsedNotchGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, attnAnim);
+                }
+                break;
+
+            default:
+                StopBinaryStreamAnimation();
+                CollapsedNotchGlow.Color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
+                CollapsedNotchGlow.BlurRadius = 6.0;
+                if (glowEnabled)
+                {
+                    var idleAnim = new DoubleAnimation(0.12, 0.22, TimeSpan.FromSeconds(3.0))
+                    {
+                        AutoReverse = true,
+                        RepeatBehavior = RepeatBehavior.Forever,
+                        EasingFunction = colorEase
+                    };
+                    CollapsedNotchGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, idleAnim);
+                }
+                else
+                {
+                    CollapsedNotchGlow.BeginAnimation(System.Windows.Media.Effects.DropShadowEffect.OpacityProperty, null);
+                    CollapsedNotchGlow.Opacity = 0.0;
+                }
+                break;
+        }
+    }
+
+    private bool _isBinaryStreamActive = false;
+
+    /// <summary>
+    /// Starts the subtle vertical digital binary stream animation during the mascot's Working state.
+    /// Hardware-accelerated and strictly clipped inside the screen-top notch cradle.
+    /// </summary>
+    private void StartBinaryStreamAnimation()
+    {
+        if (_isBinaryStreamActive || BinaryStreamOverlay == null) return;
+        _isBinaryStreamActive = true;
+
+        BinaryStreamOverlay.Visibility = Visibility.Visible;
+        var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(220));
+        BinaryStreamOverlay.BeginAnimation(OpacityProperty, fadeIn);
+
+        // 6 columns moving vertically downward at varied subtle speeds
+        var animL1 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(3.5)) { RepeatBehavior = RepeatBehavior.Forever };
+        var animL2 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(2.6)) { RepeatBehavior = RepeatBehavior.Forever };
+        var animL3 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(4.0)) { RepeatBehavior = RepeatBehavior.Forever };
+        var animR3 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(3.8)) { RepeatBehavior = RepeatBehavior.Forever };
+        var animR2 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(2.7)) { RepeatBehavior = RepeatBehavior.Forever };
+        var animR1 = new DoubleAnimation(-54.0, 0.0, TimeSpan.FromSeconds(3.4)) { RepeatBehavior = RepeatBehavior.Forever };
+
+        StreamTransformL1?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animL1);
+        StreamTransformL2?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animL2);
+        StreamTransformL3?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animL3);
+        StreamTransformR3?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animR3);
+        StreamTransformR2?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animR2);
+        StreamTransformR1?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, animR1);
+    }
+
+    /// <summary>
+    /// Immediately halts binary stream animations and hides the overlay when Working state ends.
+    /// Ensures zero background timer/rendering overhead while Idle.
+    /// </summary>
+    private void StopBinaryStreamAnimation()
+    {
+        if (!_isBinaryStreamActive && (BinaryStreamOverlay == null || BinaryStreamOverlay.Visibility == Visibility.Collapsed)) return;
+        _isBinaryStreamActive = false;
+
+        if (BinaryStreamOverlay != null)
+        {
+            var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(180));
+            fadeOut.Completed += (s, e) =>
+            {
+                if (!_isBinaryStreamActive)
+                {
+                    BinaryStreamOverlay.Visibility = Visibility.Collapsed;
+                    StreamTransformL1?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                    StreamTransformL2?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                    StreamTransformL3?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                    StreamTransformR3?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                    StreamTransformR2?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                    StreamTransformR1?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+                }
+            };
+            BinaryStreamOverlay.BeginAnimation(OpacityProperty, fadeOut);
+        }
     }
 
     private void OnHideRequested()

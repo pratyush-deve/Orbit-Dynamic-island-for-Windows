@@ -10,37 +10,55 @@
              d:DesignHeight="240" d:DesignWidth="440">
 
     <Grid x:Name="RootIsland">
-        <!-- Main Island Card Frame -->
-        <Border Background="{DynamicResource Brush.Gradient.CharcoalSurface}"
-                BorderBrush="{DynamicResource Brush.Gradient.PillBorder}"
-                BorderThickness="1.5"
-                CornerRadius="24"
-                Margin="8">
-            <Border.Effect>
-                <DropShadowEffect Color="{DynamicResource Color.Accent.PurpleLight}"
+        <!-- Dynamic Island Notch Frame (Background, neon border contour, and drop shadow glow) -->
+        <Path x:Name="IslandFramePath"
+              Fill="{DynamicResource Brush.Gradient.CharcoalSurface}"
+              Stroke="{DynamicResource Brush.Gradient.PillBorder}"
+              StrokeThickness="1.5"
+              StrokeLineJoin="Round"
+              StrokeStartLineCap="Round"
+              StrokeEndLineCap="Round"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch">
+            <Path.Effect>
+                <DropShadowEffect x:Name="IslandGlow"
+                                  Color="{DynamicResource Color.Accent.PurpleLight}"
                                   BlurRadius="28"
-                                  ShadowDepth="4"
+                                  ShadowDepth="3"
                                   Opacity="0.45"/>
-            </Border.Effect>
+            </Path.Effect>
+        </Path>
 
-            <Grid Margin="14,10,14,14">
-                <Grid.RowDefinitions>
-                    <!-- Row 0: Eyes Mascot (clicking collapses) -->
-                    <RowDefinition Height="Auto"/>
-                    <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+        <!-- Subtle Dynamic Island Shelf Highlight under Mascot Notch -->
+        <Path x:Name="NotchAccentPath"
+              Stroke="#C084FC"
+              StrokeThickness="1.2"
+              Opacity="0.30"
+              StrokeStartLineCap="Round"
+              StrokeEndLineCap="Round"
+              HorizontalAlignment="Stretch"
+              VerticalAlignment="Stretch"
+              IsHitTestVisible="False"/>
 
-                <!-- Top-Left Task Manager Shortcut Button -->
-                <Button x:Name="BtnTaskManager"
-                        Grid.Row="0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
-                        Width="26"
-                        Height="22"
-                        Margin="2,2,0,0"
-                        Cursor="Hand"
-                        Click="OnTaskManagerClicked">
+        <!-- Main Island Content Surface -->
+        <Grid x:Name="IslandContentGrid" Margin="14,4,14,12">
+            <Grid.RowDefinitions>
+                <!-- Row 0: Screen-Top Notch Header Bar (Task Manager, File Explorer, Notch Mascot, Hide) -->
+                <RowDefinition Height="44"/>
+                <!-- Row 1: Expandable Island Body Content (revealed during Stage 2) -->
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Top-Left Task Manager Shortcut Button -->
+            <Button x:Name="BtnTaskManager"
+                    Grid.Row="0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Width="26"
+                    Height="22"
+                    Margin="6,0,0,0"
+                    Cursor="Hand"
+                    Click="OnTaskManagerClicked">
                     <Button.Template>
                         <ControlTemplate TargetType="Button">
                             <Border x:Name="BtnBorder"
@@ -97,10 +115,10 @@
                 <Button x:Name="BtnFileExplorer"
                         Grid.Row="0"
                         HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
+                        VerticalAlignment="Center"
                         Width="26"
                         Height="22"
-                        Margin="33,2,0,0"
+                        Margin="38,0,0,0"
                         Cursor="Hand"
                         Click="OnFileExplorerClicked">
                     <Button.Template>
@@ -158,11 +176,12 @@
                     </Button.Template>
                 </Button>
 
-                <!-- 1. Expressive Mascot Eyes at the top -->
+                <!-- 1. Expressive Mascot Eyes in Screen-Top Notch -->
                 <mascot:EyeMascot x:Name="IslandMascot"
                                   Grid.Row="0"
                                   HorizontalAlignment="Center"
-                                  Margin="0,0,0,6"
+                                  VerticalAlignment="Center"
+                                  Margin="0,-2,0,0"
                                   Cursor="Hand"
                                   MouseLeftButtonDown="OnMascotClicked"/>
 
@@ -170,9 +189,9 @@
                 <Button x:Name="BtnHidePanel"
                         Grid.Row="0"
                         HorizontalAlignment="Right"
-                        VerticalAlignment="Top"
+                        VerticalAlignment="Center"
                         Height="22"
-                        Margin="0,2,2,0"
+                        Margin="0,0,6,0"
                         Cursor="Hand"
                         Click="OnHideButtonClicked">
                     <Button.Template>
@@ -771,6 +790,5 @@
                     </Grid>
                 </Grid>
             </Grid>
-        </Border>
-    </Grid>
+        </Grid>
 </UserControl>

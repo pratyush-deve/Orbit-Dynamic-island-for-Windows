@@ -48,15 +48,18 @@
     <SolidColorBrush x:Key="Brush.Status.Online" Color="{StaticResource Color.Status.Online}"/>
 
     <!-- Gradients -->
-    <LinearGradientBrush x:Key="Brush.Gradient.CharcoalSurface" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#181822" Offset="0"/>
-        <GradientStop Color="#121218" Offset="1"/>
+    <LinearGradientBrush x:Key="Brush.Gradient.CharcoalSurface" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#0B0714" Offset="0"/>
+        <GradientStop Color="#140C24" Offset="0.6"/>
+        <GradientStop Color="#1A0F30" Offset="1"/>
     </LinearGradientBrush>
 
-    <LinearGradientBrush x:Key="Brush.Gradient.PillBorder" StartPoint="0,0" EndPoint="1,1">
+    <LinearGradientBrush x:Key="Brush.Gradient.PillBorder" StartPoint="0,0" EndPoint="1,0">
         <GradientStop Color="#7C3AED" Offset="0"/>
-        <GradientStop Color="#3B0764" Offset="0.5"/>
-        <GradientStop Color="#4C1D95" Offset="1"/>
+        <GradientStop Color="#C084FC" Offset="0.3"/>
+        <GradientStop Color="#E9D5FF" Offset="0.5"/>
+        <GradientStop Color="#C084FC" Offset="0.7"/>
+        <GradientStop Color="#7C3AED" Offset="1"/>
     </LinearGradientBrush>
 
     <LinearGradientBrush x:Key="Brush.Gradient.ExpandedHeader" StartPoint="0,0" EndPoint="0,1">
