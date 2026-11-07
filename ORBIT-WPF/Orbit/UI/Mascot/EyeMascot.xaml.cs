@@ -131,6 +131,144 @@ public partial class EyeMascot : UserControl
     public void SetGlowEnabled(bool enabled)
     {
         _isGlowEnabled = enabled;
+        if (LeftClosedGlow != null) LeftClosedGlow.Opacity = enabled ? 0.95 : 0.0;
+        if (RightClosedGlow != null) RightClosedGlow.Opacity = enabled ? 0.95 : 0.0;
+    }
+
+    /// <summary>
+    /// Gracefully closes the mascot eyes into serene sleeping downward arches (︶ ︶) during hover expansion.
+    /// </summary>
+    public void GracefullyCloseEyes(TimeSpan duration)
+    {
+        if (LeftClosedEye == null || RightClosedEye == null ||
+            LeftEyePill == null || RightEyePill == null) return;
+
+        // Never close eyes or alter visuals if in Working, Completed, or alert state
+        if (_currentMouthState != Orbit.Models.AgentState.Idle || _isHoldingDoneState) return;
+
+        _glanceTimer.Stop();
+        _blinkTimer.Stop();
+
+        var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseInOut };
+
+        // Fade out open capsule eyes
+        var pillFadeOut = new DoubleAnimation(0.0, duration) { EasingFunction = fadeEase };
+        LeftEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+        RightEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+
+        // Fade in closed sleeping eye arches
+        var closedFadeIn = new DoubleAnimation(1.0, duration) { EasingFunction = fadeEase };
+        LeftClosedEye.BeginAnimation(OpacityProperty, closedFadeIn);
+        RightClosedEye.BeginAnimation(OpacityProperty, closedFadeIn);
+    }
+
+    /// <summary>
+    /// Restores normal open capsule eyes and re-enables organic glance and blinking.
+    /// In Working or Completed state, preserves the determined working eyes or completed smile without exposing white pupils.
+    /// </summary>
+    public void RestoreNormalEyes(TimeSpan duration)
+    {
+        if (LeftClosedEye == null || RightClosedEye == null ||
+            LeftEyePill == null || RightEyePill == null) return;
+
+        // In Working state: strictly keep white capsule pills hidden and focused purple working eyes active
+        if (_currentMouthState == Orbit.Models.AgentState.Working)
+        {
+            LeftClosedEye.BeginAnimation(OpacityProperty, null);
+            RightClosedEye.BeginAnimation(OpacityProperty, null);
+            LeftClosedEye.Opacity = 0.0;
+            RightClosedEye.Opacity = 0.0;
+
+            LeftEyePill.BeginAnimation(OpacityProperty, null);
+            RightEyePill.BeginAnimation(OpacityProperty, null);
+            LeftEyePill.Opacity = 0.0;
+            RightEyePill.Opacity = 0.0;
+
+            if (LeftSmilingEye != null && RightSmilingEye != null)
+            {
+                LeftSmilingEye.BeginAnimation(OpacityProperty, null);
+                RightSmilingEye.BeginAnimation(OpacityProperty, null);
+                LeftSmilingEye.Opacity = 0.0;
+                RightSmilingEye.Opacity = 0.0;
+            }
+
+            if (LeftWorkingEye != null && RightWorkingEye != null)
+            {
+                LeftWorkingEye.BeginAnimation(OpacityProperty, null);
+                RightWorkingEye.BeginAnimation(OpacityProperty, null);
+                LeftWorkingEye.Opacity = 1.0;
+                RightWorkingEye.Opacity = 1.0;
+            }
+
+            _glanceTimer.Stop();
+            _blinkTimer.Stop();
+            return;
+        }
+
+        // In Completed state: strictly keep white capsule pills hidden and smiling eyes active
+        if (_currentMouthState == Orbit.Models.AgentState.Completed || _isHoldingDoneState)
+        {
+            LeftClosedEye.BeginAnimation(OpacityProperty, null);
+            RightClosedEye.BeginAnimation(OpacityProperty, null);
+            LeftClosedEye.Opacity = 0.0;
+            RightClosedEye.Opacity = 0.0;
+
+            LeftEyePill.BeginAnimation(OpacityProperty, null);
+            RightEyePill.BeginAnimation(OpacityProperty, null);
+            LeftEyePill.Opacity = 0.0;
+            RightEyePill.Opacity = 0.0;
+
+            if (LeftWorkingEye != null && RightWorkingEye != null)
+            {
+                LeftWorkingEye.BeginAnimation(OpacityProperty, null);
+                RightWorkingEye.BeginAnimation(OpacityProperty, null);
+                LeftWorkingEye.Opacity = 0.0;
+                RightWorkingEye.Opacity = 0.0;
+            }
+
+            if (LeftSmilingEye != null && RightSmilingEye != null)
+            {
+                LeftSmilingEye.BeginAnimation(OpacityProperty, null);
+                RightSmilingEye.BeginAnimation(OpacityProperty, null);
+                LeftSmilingEye.Opacity = 1.0;
+                RightSmilingEye.Opacity = 1.0;
+            }
+
+            _glanceTimer.Stop();
+            _blinkTimer.Stop();
+            return;
+        }
+
+        if (duration <= TimeSpan.Zero)
+        {
+            LeftClosedEye.BeginAnimation(OpacityProperty, null);
+            RightClosedEye.BeginAnimation(OpacityProperty, null);
+            LeftClosedEye.Opacity = 0.0;
+            RightClosedEye.Opacity = 0.0;
+
+            LeftEyePill.BeginAnimation(OpacityProperty, null);
+            RightEyePill.BeginAnimation(OpacityProperty, null);
+            LeftEyePill.Opacity = 1.0;
+            RightEyePill.Opacity = 1.0;
+        }
+        else
+        {
+            var fadeEase = new QuadraticEase { EasingMode = EasingMode.EaseOut };
+
+            var closedFadeOut = new DoubleAnimation(0.0, duration) { EasingFunction = fadeEase };
+            LeftClosedEye.BeginAnimation(OpacityProperty, closedFadeOut);
+            RightClosedEye.BeginAnimation(OpacityProperty, closedFadeOut);
+
+            var pillFadeIn = new DoubleAnimation(1.0, duration) { EasingFunction = fadeEase };
+            LeftEyePill.BeginAnimation(OpacityProperty, pillFadeIn);
+            RightEyePill.BeginAnimation(OpacityProperty, pillFadeIn);
+        }
+
+        if (!_isTrackingCursor)
+        {
+            _glanceTimer.Start();
+        }
+        _blinkTimer.Start();
     }
 
     /// <summary>
@@ -258,9 +396,12 @@ public partial class EyeMascot : UserControl
         // Smoothly glide both white capsules and black eyeballs to resting center
         AnimatePupilsIndividual(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, TimeSpan.FromMilliseconds(280));
 
-        // Resume natural idle glance timer
-        _glanceTimer.Interval = TimeSpan.FromSeconds(2.0 + (_random.NextDouble() * 1.5));
-        _glanceTimer.Start();
+        // Resume natural idle glance timer only in Idle state
+        if (_currentMouthState == Orbit.Models.AgentState.Idle && !_isHoldingDoneState)
+        {
+            _glanceTimer.Interval = TimeSpan.FromSeconds(2.0 + (_random.NextDouble() * 1.5));
+            _glanceTimer.Start();
+        }
     }
 
     /// <summary>
@@ -709,6 +850,7 @@ public partial class EyeMascot : UserControl
             {
                 // WORKING: Determined focused eye expression (narrowed, inward-angled upper lid) with vibrant neon purple glow
                 _glanceTimer.Stop();
+                _blinkTimer.Stop();
                 AnimatePupilsIndividual(0.0, 0.0, 0.0, 0.0, TimeSpan.FromMilliseconds(180));
 
                 LeftSmilingEye.BeginAnimation(OpacityProperty, null);
@@ -716,10 +858,22 @@ public partial class EyeMascot : UserControl
                 LeftSmilingEye.Opacity = 0.0;
                 RightSmilingEye.Opacity = 0.0;
 
-                // Hide relaxed normal pill eyes
-                var pillFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(150)) { EasingFunction = fadeEase };
-                LeftEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
-                RightEyePill.BeginAnimation(OpacityProperty, pillFadeOut);
+                if (LeftClosedEye != null)
+                {
+                    LeftClosedEye.BeginAnimation(OpacityProperty, null);
+                    LeftClosedEye.Opacity = 0.0;
+                }
+                if (RightClosedEye != null)
+                {
+                    RightClosedEye.BeginAnimation(OpacityProperty, null);
+                    RightClosedEye.Opacity = 0.0;
+                }
+
+                // Hide relaxed normal pill eyes immediately to eliminate any white pupil artifacts
+                LeftEyePill.BeginAnimation(OpacityProperty, null);
+                RightEyePill.BeginAnimation(OpacityProperty, null);
+                LeftEyePill.Opacity = 0.0;
+                RightEyePill.Opacity = 0.0;
 
                 // Reveal focused working eyes
                 if (LeftWorkingEye != null && RightWorkingEye != null)
@@ -808,6 +962,17 @@ public partial class EyeMascot : UserControl
         RightSmilingEye.BeginAnimation(OpacityProperty, null);
         LeftSmilingEye.Opacity = 0.0;
         RightSmilingEye.Opacity = 0.0;
+
+        if (LeftClosedEye != null)
+        {
+            LeftClosedEye.BeginAnimation(OpacityProperty, null);
+            LeftClosedEye.Opacity = 0.0;
+        }
+        if (RightClosedEye != null)
+        {
+            RightClosedEye.BeginAnimation(OpacityProperty, null);
+            RightClosedEye.Opacity = 0.0;
+        }
 
         if (LeftWorkingEye != null)
         {

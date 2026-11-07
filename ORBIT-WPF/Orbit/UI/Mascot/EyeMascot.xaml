@@ -85,6 +85,21 @@
                         <DropShadowEffect Color="#10B981" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
                     </Path.Effect>
                 </Path>
+
+                <!-- 4. Left Closed Sleeping Eye Arch (︶) for hover expansion -->
+                <Path x:Name="LeftClosedEye"
+                      Data="M 1,9 Q 10,19 19,9"
+                      Stroke="#FFFFFF"
+                      StrokeThickness="3.0"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect x:Name="LeftClosedGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
+                </Path>
             </Grid>
 
             <!-- Right Eye Container -->
@@ -151,6 +166,21 @@
                       Opacity="0">
                     <Path.Effect>
                         <DropShadowEffect Color="#10B981" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                    </Path.Effect>
+                </Path>
+
+                <!-- 4. Right Closed Sleeping Eye Arch (︶) for hover expansion -->
+                <Path x:Name="RightClosedEye"
+                      Data="M 1,9 Q 10,19 19,9"
+                      Stroke="#FFFFFF"
+                      StrokeThickness="3.0"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      Opacity="0">
+                    <Path.Effect>
+                        <DropShadowEffect x:Name="RightClosedGlow" Color="#FFFFFF" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
                     </Path.Effect>
                 </Path>
             </Grid>

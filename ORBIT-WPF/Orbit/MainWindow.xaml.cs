@@ -3,16 +3,25 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Orbit.Core;
 using Orbit.Integrations.Desktop;
+using Orbit.Models;
 using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
+using Orbit.Services.FileDock;
 using Orbit.Services.Hubs;
 using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.Services.SystemMonitor;
+using DragEventArgs = System.Windows.DragEventArgs;
+using DragDropEffects = System.Windows.DragDropEffects;
+using DataObject = System.Windows.DataObject;
+using DataFormats = System.Windows.DataFormats;
+using Border = System.Windows.Controls.Border;
+using Brushes = System.Windows.Media.Brushes;
 
 namespace Orbit;
 
@@ -28,6 +37,11 @@ public partial class MainWindow : Window
     // Standard dimensions (DIPs)
     public const double CollapsedWidth = 160.0;
     public const double CollapsedHeight = 38.0;
+    public const double QuickActionsWidth = 310.0;
+    public const double QuickActionsHeight = 44.0;
+    public const double FileDockTotalHeight = 150.0;
+    public const double HoverActivationSeconds = 2.0;
+    public const double CollapseDelayMilliseconds = 450.0;
     public const double ExpandedWidth = 480.0;
     public const double ExpandedHeight = 168.0;
     public const double NotesWidth = 500.0;
@@ -49,10 +63,26 @@ public partial class MainWindow : Window
     private readonly IWorkHubService? _workHubService;
     private readonly INotesService? _notesService;
     private readonly ISystemMonitorService? _systemMonitorService;
+    private readonly IFileDockService _fileDockService;
 
     private IntPtr _hwnd = IntPtr.Zero;
     private Orbit.Models.AgentState _currentAgentState = Orbit.Models.AgentState.Idle;
     private string _currentAgentMessage = string.Empty;
+
+    // File Dock & Quick Actions state management
+    private bool _isFileDockOpen = false;
+    private bool _isFileDockTransitioning = false;
+    public bool IsFileDockOpen => _isFileDockOpen;
+    public IFileDockService FileDockService => _fileDockService;
+
+    // Hover-based quick actions expansion state management
+    private readonly DispatcherTimer _hoverTimer;
+    private readonly DispatcherTimer _collapseDelayTimer;
+    private bool _isHovering = false;
+    private bool _isQuickActionsOpen = false;
+    private bool _isHoverExpanding = false;
+    private bool _isHoverCollapsing = false;
+    private bool _isTransitioningToFullExpand = false;
 
     // Notch outline & shelf brushes for synchronized state transitions (Idle/Working = Purple, Completed = Emerald Green, Attention/Error = Red)
     private static readonly LinearGradientBrush BrushPurpleNotchOutline = CreatePurpleOutlineBrush();
@@ -146,7 +176,8 @@ public partial class MainWindow : Window
         ISocialHubService? socialHubService = null,
         IWorkHubService? workHubService = null,
         INotesService? notesService = null,
-        ISystemMonitorService? systemMonitorService = null)
+        ISystemMonitorService? systemMonitorService = null,
+        IFileDockService? fileDockService = null)
     {
         InitializeComponent();
 
@@ -165,6 +196,21 @@ public partial class MainWindow : Window
         _workHubService = workHubService;
         _notesService = notesService;
         _systemMonitorService = systemMonitorService;
+        _fileDockService = fileDockService ?? new FileDockService();
+
+        // Initialize 2-second continuous hover recognition timer
+        _hoverTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(HoverActivationSeconds)
+        };
+        _hoverTimer.Tick += OnHoverTimerTick;
+
+        // Initialize graceful collapse delay timer
+        _collapseDelayTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(CollapseDelayMilliseconds)
+        };
+        _collapseDelayTimer.Tick += OnCollapseDelayTimerTick;
 
         // Wire lifecycle service events
         _lifecycleService.StateChanged += OnStateChanged;
@@ -215,6 +261,14 @@ public partial class MainWindow : Window
             Dispatcher.Invoke(() =>
             {
                 _currentAgentState = state;
+                if (state != Orbit.Models.AgentState.Idle)
+                {
+                    CancelHoverTimer();
+                    if (_isQuickActionsOpen && !_isTransitioningToFullExpand && !_isHoverCollapsing)
+                    {
+                        ExecuteHoverCollapse();
+                    }
+                }
                 UpdateCompactNotchGlow(state);
             });
         };
@@ -223,6 +277,8 @@ public partial class MainWindow : Window
         IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService, _notesService, _systemMonitorService);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
         IslandPanel.NotesModeChanged += OnNotesModeChanged;
+
+        FileDockPanel.Initialize(_fileDockService);
 
         if (_attentionManager != null)
         {
@@ -239,6 +295,14 @@ public partial class MainWindow : Window
                     }
 
                     _currentAgentState = state;
+                    if (state != Orbit.Models.AgentState.Idle)
+                    {
+                        CancelHoverTimer();
+                        if (_isQuickActionsOpen && !_isTransitioningToFullExpand && !_isHoverCollapsing)
+                        {
+                            ExecuteHoverCollapse();
+                        }
+                    }
                     PillMascot.SetAiState(state, msg);
                     UpdateCompactNotchGlow(state);
                 });
@@ -331,6 +395,40 @@ public partial class MainWindow : Window
     {
         OrbitLogger.Debug(LogCategory, $"Window deactivated. CurrentState = {_lifecycleService.CurrentState}");
 
+        if (_isFileDockOpen)
+        {
+            // If there are zero files, no need to pin the file dock, it can collapse when focus is lost!
+            if (_fileDockService.Items.Count == 0)
+            {
+                OrbitLogger.Info(LogCategory, "File Dock has 0 files and lost focus. Collapsing to idle.");
+                CloseFileDock(toQuickActions: false);
+                return;
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Pinned)
+            {
+                // Pinned mode with files remains open while switching apps or dragging files elsewhere
+                _overlayService.ReapplyTopmost(_hwnd);
+                return;
+            }
+            if (_fileDockService.CurrentMode == FileDockMode.Temporary)
+            {
+                if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+                {
+                    _overlayService.ReapplyTopmost(_hwnd);
+                    return;
+                }
+                CloseFileDock(toQuickActions: false);
+                return;
+            }
+        }
+
+        if (_isQuickActionsOpen && !_isTransitioningToFullExpand)
+        {
+            ExecuteHoverCollapse();
+            return;
+        }
+
         // CRITICAL: Do NOT collapse or exit if Notes mode is active!
         if (IslandPanel.IsNotesModeActive)
         {
@@ -368,7 +466,8 @@ public partial class MainWindow : Window
 
         // 1. Safeguard against overlapping animations: safely ignore while transitioning
         if (_lifecycleService.CurrentState == CompanionState.Expanding ||
-            _lifecycleService.CurrentState == CompanionState.Collapsing)
+            _lifecycleService.CurrentState == CompanionState.Collapsing ||
+            _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand)
         {
             OrbitLogger.Debug(LogCategory, "Ignored toggle request while companion is transitioning.");
             return;
@@ -378,6 +477,58 @@ public partial class MainWindow : Window
         if (_lifecycleService.CurrentState == CompanionState.Hidden || !IsVisible || Visibility != Visibility.Visible)
         {
             OrbitLogger.Info(LogCategory, "Mascot is hidden. Bringing mascot to focus on screen.");
+            CancelHoverTimer();
+            CancelCollapseDelay();
+
+            // Force close any open File Dock or Quick Actions bar
+            if (_isFileDockOpen)
+            {
+                _isFileDockOpen = false;
+                _fileDockService.CurrentMode = FileDockMode.Closed;
+                FileDockPanel.Visibility = Visibility.Collapsed;
+                FileDockPanel.Opacity = 0.0;
+                FileDockPanel.IsHitTestVisible = false;
+                FileDockPanel.SetDragPreviewActive(false);
+                HighlightFileDockButton(false);
+            }
+
+            _isQuickActionsOpen = false;
+            QuickActionsBar.Visibility = Visibility.Collapsed;
+            QuickActionsBar.Opacity = 0.0;
+            QuickActionsBar.IsHitTestVisible = false;
+
+            // Reset geometry to collapsed notch
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+            Width = CollapsedWidth;
+            Height = CollapsedHeight;
+            PositionAtTopCenter(CollapsedWidth);
+            UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+            // Clear all animation locks on MascotContainerGrid & restore eyes completely
+            MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+            MascotContainerGrid.Visibility = Visibility.Visible;
+            MascotContainerGrid.Opacity = 1.0;
+            MascotContainerGrid.IsHitTestVisible = true;
+
+            if (_currentAgentState == Orbit.Models.AgentState.Working)
+            {
+                PillMascot.SetAiState(Orbit.Models.AgentState.Working, _currentAgentMessage);
+            }
+            else if (_currentAgentState == Orbit.Models.AgentState.Completed || PillMascot.IsHoldingDoneState)
+            {
+                PillMascot.SetAiState(Orbit.Models.AgentState.Completed, _currentAgentMessage);
+            }
+            else if (_currentAgentState == Orbit.Models.AgentState.Attention || _currentAgentState == Orbit.Models.AgentState.Error)
+            {
+                PillMascot.SetAiState(_currentAgentState, _currentAgentMessage);
+            }
+            else
+            {
+                PillMascot.RestoreNormalEyes(TimeSpan.Zero);
+            }
+
             _lifecycleService.Show();
             Show();
             Activate();
@@ -388,6 +539,8 @@ public partial class MainWindow : Window
 
         // 3. If the mascot is currently visible on screen (Collapsed or Expanded), hide it (matching the Hide button)
         OrbitLogger.Info(LogCategory, "Mascot is visible on screen. Hiding mascot.");
+        CancelHoverTimer();
+        CancelCollapseDelay();
         _lifecycleService.Hide();
     }
 
@@ -406,7 +559,28 @@ public partial class MainWindow : Window
                     break;
 
                 case CompanionState.Hidden:
-                    Hide();
+                    CancelHoverTimer();
+                    CancelCollapseDelay();
+
+                    if (_isFileDockOpen)
+                    {
+                        _isFileDockOpen = false;
+                        _fileDockService.CurrentMode = FileDockMode.Closed;
+                        FileDockPanel.Visibility = Visibility.Collapsed;
+                        FileDockPanel.Opacity = 0.0;
+                        FileDockPanel.IsHitTestVisible = false;
+                        FileDockPanel.SetDragPreviewActive(false);
+                        HighlightFileDockButton(false);
+                    }
+
+                    if (_isQuickActionsOpen)
+                    {
+                        _isQuickActionsOpen = false;
+                        QuickActionsBar.Visibility = Visibility.Collapsed;
+                        QuickActionsBar.Opacity = 0.0;
+                        QuickActionsBar.IsHitTestVisible = false;
+                    }
+
                     // Reset window geometry so next Show() restores directly as the top-centre pill
                     BeginAnimation(WidthProperty, null);
                     BeginAnimation(HeightProperty, null);
@@ -414,15 +588,80 @@ public partial class MainWindow : Window
                     Width = CollapsedWidth;
                     Height = CollapsedHeight;
                     PositionAtTopCenter(CollapsedWidth);
+                    UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                    // Clear any animation locks on MascotContainerGrid & restore eyes
+                    MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+                    MascotContainerGrid.Visibility = Visibility.Visible;
+                    MascotContainerGrid.Opacity = 1.0;
+                    MascotContainerGrid.IsHitTestVisible = true;
+                    PillMascot.RestoreNormalEyes(TimeSpan.Zero);
+
+                    Hide();
                     IslandPanel.ResetToHomeView();
                     CollapsedView.Visibility = Visibility.Visible;
                     ExpandedView.Visibility = Visibility.Collapsed;
                     break;
 
                 case CompanionState.Collapsed:
+                    CancelHoverTimer();
+                    CancelCollapseDelay();
+                    _isQuickActionsOpen = false;
+                    _isHoverExpanding = false;
+                    _isHoverCollapsing = false;
+                    _isTransitioningToFullExpand = false;
+
+                    if (_isFileDockOpen)
+                    {
+                        _isFileDockOpen = false;
+                        _fileDockService.CurrentMode = FileDockMode.Closed;
+                        FileDockPanel.Visibility = Visibility.Collapsed;
+                        FileDockPanel.Opacity = 0.0;
+                        FileDockPanel.IsHitTestVisible = false;
+                        FileDockPanel.SetDragPreviewActive(false);
+                        HighlightFileDockButton(false);
+                    }
+
+                    QuickActionsBar.Visibility = Visibility.Collapsed;
+                    QuickActionsBar.Opacity = 0.0;
+                    QuickActionsBar.IsHitTestVisible = false;
+
+                    // Reset window geometry so it is strictly the top-centre pill
+                    BeginAnimation(WidthProperty, null);
+                    BeginAnimation(HeightProperty, null);
+                    BeginAnimation(LeftProperty, null);
+                    Width = CollapsedWidth;
+                    Height = CollapsedHeight;
+                    PositionAtTopCenter(CollapsedWidth);
+                    UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                    // Clear any animation locks on MascotContainerGrid & restore eyes
+                    MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+                    MascotContainerGrid.Visibility = Visibility.Visible;
+                    MascotContainerGrid.Opacity = 1.0;
+                    MascotContainerGrid.IsHitTestVisible = true;
+
                     Show();
                     PillMascot.IsExpanded = false;
                     PillMascot.IsEmbeddedInNotch = true;
+
+                    if (_currentAgentState == Orbit.Models.AgentState.Working)
+                    {
+                        PillMascot.SetAiState(Orbit.Models.AgentState.Working, _currentAgentMessage);
+                    }
+                    else if (_currentAgentState == Orbit.Models.AgentState.Completed || PillMascot.IsHoldingDoneState)
+                    {
+                        PillMascot.SetAiState(Orbit.Models.AgentState.Completed, _currentAgentMessage);
+                    }
+                    else if (_currentAgentState == Orbit.Models.AgentState.Attention || _currentAgentState == Orbit.Models.AgentState.Error)
+                    {
+                        PillMascot.SetAiState(_currentAgentState, _currentAgentMessage);
+                    }
+                    else
+                    {
+                        PillMascot.RestoreNormalEyes(TimeSpan.Zero);
+                    }
+
                     UpdateCompactNotchGlow(_currentAgentState);
                     IslandPanel.ResetToHomeView();
                     _overlayService.BringToFront(_hwnd);
@@ -441,21 +680,90 @@ public partial class MainWindow : Window
 
     private void OnWindowMouseMove(object sender, MouseEventArgs e)
     {
-        var pos = e.GetPosition(PillMascot);
-        PillMascot.TrackCursor(pos);
+        if (_isFileDockOpen || _isQuickActionsOpen)
+        {
+            CancelCollapseDelay();
+        }
+        else
+        {
+            var pos = e.GetPosition(PillMascot);
+            PillMascot.TrackCursor(pos);
+
+            // Ensure hover detection starts when mouse is over mascot while collapsed AND in Idle state only
+            if (_currentAgentState == Orbit.Models.AgentState.Idle &&
+                !PillMascot.IsHoldingDoneState &&
+                _lifecycleService.CurrentState == CompanionState.Collapsed &&
+                !_isHovering && !_isHoverExpanding && !_isHoverCollapsing && !_isTransitioningToFullExpand)
+            {
+                StartHoverTimer();
+            }
+        }
     }
 
     private void OnWindowMouseLeave(object sender, MouseEventArgs e)
     {
         PillMascot.OnWindowMouseLeave();
+
+        if (_isHovering && !_isQuickActionsOpen && !_isFileDockOpen)
+        {
+            CancelHoverTimer();
+        }
+
+        if (_isFileDockOpen)
+        {
+            if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+            {
+                return; // Don't collapse during active drag-out
+            }
+
+            // If there are zero files, no need to pin: collapse when cursor leaves
+            if (_fileDockService.Items.Count == 0)
+            {
+                if (!IsMouseOver && FileDockPanel?.IsMouseOver != true && QuickActionsBar?.IsMouseOver != true)
+                {
+                    ScheduleHoverCollapse();
+                }
+                return;
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Pinned)
+            {
+                return; // Pinned mode with files never collapses on mouse leave
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Temporary)
+            {
+                if (!IsMouseOver && FileDockPanel?.IsMouseOver != true && QuickActionsBar?.IsMouseOver != true)
+                {
+                    CloseFileDock(toQuickActions: false);
+                }
+                return;
+            }
+        }
+
+        if (_isQuickActionsOpen && !_isTransitioningToFullExpand && !_isHoverCollapsing)
+        {
+            if (!IsMouseOver && !QuickActionsBar.IsMouseOver)
+            {
+                ScheduleHoverCollapse();
+            }
+        }
     }
 
     private void OnMascotClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            if (_isFileDockOpen)
+            {
+                OrbitLogger.Info(LogCategory, "Mascot clicked while File Dock open. Closing dock and returning to normal ORBIT.");
+                CloseFileDock(toQuickActions: false);
+                return;
+            }
+
             if (_lifecycleService.CurrentState == CompanionState.Collapsed)
             {
+                CancelHoverTimer();
                 OrbitLogger.Info(LogCategory, "Collapsed pill clicked. Initiating expansion.");
                 _lifecycleService.RequestExpand();
             }
@@ -471,6 +779,711 @@ public partial class MainWindow : Window
     {
         OrbitLogger.Info(LogCategory, "Expanded island collapse requested. Initiating collapse.");
         _lifecycleService.RequestCollapse();
+    }
+
+    #endregion
+
+    #region Hover Recognition and Quick Actions
+
+    private void StartHoverTimer()
+    {
+        // Allow hover quick actions ONLY in Idle state (ignore working, done, error, attention, etc.)
+        if (_currentAgentState != Orbit.Models.AgentState.Idle || PillMascot.IsHoldingDoneState)
+        {
+            return;
+        }
+
+        if (_lifecycleService.CurrentState != CompanionState.Collapsed) return;
+        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isHovering) return;
+
+        _isHovering = true;
+        _hoverTimer.Stop();
+        _hoverTimer.Interval = TimeSpan.FromSeconds(HoverActivationSeconds);
+        _hoverTimer.Start();
+        OrbitLogger.Info(LogCategory, $"Mascot hover recognized. Started {HoverActivationSeconds}-second delay timer.");
+    }
+
+    private void OnMascotMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+        {
+            StartHoverTimer();
+        }
+    }
+
+    private void OnMascotMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (_isHovering && !_isQuickActionsOpen && !_isHoverExpanding)
+        {
+            var pos = e.GetPosition(this);
+            if (pos.X < 0 || pos.X > ActualWidth || pos.Y < 0 || pos.Y > ActualHeight)
+            {
+                CancelHoverTimer();
+            }
+        }
+    }
+
+    private void OnHoverTimerTick(object? sender, EventArgs e)
+    {
+        _hoverTimer.Stop();
+        _isHovering = false;
+
+        OrbitLogger.Info(LogCategory, $"Hover timer expired! State={_lifecycleService.CurrentState}, AgentState={_currentAgentState}, QuickActionsOpen={_isQuickActionsOpen}");
+
+        // Strictly allow hover expansion only in Idle state
+        if (_currentAgentState != Orbit.Models.AgentState.Idle || PillMascot.IsHoldingDoneState) return;
+        if (_lifecycleService.CurrentState != CompanionState.Collapsed) return;
+        if (_isQuickActionsOpen || _isHoverExpanding || _isTransitioningToFullExpand) return;
+
+        ExecuteHoverExpansion();
+    }
+
+    private void CancelHoverTimer()
+    {
+        if (_hoverTimer.IsEnabled)
+        {
+            _hoverTimer.Stop();
+            OrbitLogger.Info(LogCategory, $"Mascot hover timer canceled (cursor left mascot before {HoverActivationSeconds} seconds).");
+        }
+        _isHovering = false;
+        if (!_isQuickActionsOpen && !_isHoverExpanding && _currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+        {
+            PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(150));
+        }
+    }
+
+    private void ExecuteHoverExpansion()
+    {
+        _isHoverExpanding = true;
+        OrbitLogger.Info(LogCategory, $"Continuous {HoverActivationSeconds}-second hover detected. Expanding Quick Actions horizontally.");
+
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
+
+        // 1. Gracefully close eyes during expansion
+        PillMascot.GracefullyCloseEyes(TimeSpan.FromMilliseconds(220));
+
+        var duration = TimeSpan.FromMilliseconds(260);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        // 2. Smoothly animate width expansion (160 -> 310), height (38 -> 42), and left position
+        var widthAnim = new DoubleAnimation(QuickActionsWidth, duration) { EasingFunction = ease };
+        var heightAnim = new DoubleAnimation(QuickActionsHeight, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+        // 3. Fade out mascot eyes completely once expansion finishes
+        var mascotFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(160))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(100),
+            EasingFunction = ease
+        };
+
+        // 4. Reveal QuickActionsBar
+        QuickActionsBar.Visibility = Visibility.Visible;
+        QuickActionsBar.Opacity = 0.0;
+        QuickActionsBar.IsHitTestVisible = false;
+
+        var actionsFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(120),
+            EasingFunction = ease
+        };
+
+        widthAnim.Completed += (s, e) =>
+        {
+            Width = QuickActionsWidth;
+            Height = QuickActionsHeight;
+            Left = targetLeft;
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
+
+            MascotContainerGrid.Visibility = Visibility.Collapsed;
+            MascotContainerGrid.IsHitTestVisible = false;
+
+            QuickActionsBar.IsHitTestVisible = true;
+            QuickActionsBar.Opacity = 1.0;
+
+            _isQuickActionsOpen = true;
+            _isHoverExpanding = false;
+
+            _overlayService.ReapplyTopmost(_hwnd);
+            OrbitLogger.Info(LogCategory, "Quick Actions horizontal expansion completed.");
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(HeightProperty, heightAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+        MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeOut);
+        QuickActionsBar.BeginAnimation(OpacityProperty, actionsFadeIn);
+    }
+
+    private void OnQuickActionsMouseEnter(object sender, MouseEventArgs e)
+    {
+        CancelCollapseDelay();
+    }
+
+    private void OnQuickActionsMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!_isQuickActionsOpen || _isTransitioningToFullExpand || _isHoverCollapsing) return;
+
+        // If dragging out, do not collapse
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            return;
+        }
+
+        // If mouse is still anywhere over QuickActionsBar, FileDockPanel, or MainWindow, do not collapse
+        if (QuickActionsBar.IsMouseOver || (FileDockPanel != null && FileDockPanel.IsMouseOver) || IsMouseOver)
+        {
+            return;
+        }
+
+        if (_isFileDockOpen)
+        {
+            // If there are zero files, allow it to collapse when cursor leaves
+            if (_fileDockService.Items.Count == 0)
+            {
+                ScheduleHoverCollapse();
+                return;
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Pinned)
+            {
+                return;
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Temporary)
+            {
+                CloseFileDock(toQuickActions: false);
+                return;
+            }
+        }
+
+        ScheduleHoverCollapse();
+    }
+
+    private void ScheduleHoverCollapse()
+    {
+        if (!_isQuickActionsOpen || _isTransitioningToFullExpand || _isHoverCollapsing) return;
+
+        _collapseDelayTimer.Stop();
+        _collapseDelayTimer.Interval = TimeSpan.FromMilliseconds(CollapseDelayMilliseconds);
+        _collapseDelayTimer.Start();
+        OrbitLogger.Debug(LogCategory, $"Cursor left quick actions island. Scheduled graceful collapse in {CollapseDelayMilliseconds}ms.");
+    }
+
+    private void CancelCollapseDelay()
+    {
+        if (_collapseDelayTimer.IsEnabled)
+        {
+            _collapseDelayTimer.Stop();
+            OrbitLogger.Debug(LogCategory, "Cursor returned to quick actions island. Canceled scheduled collapse.");
+        }
+    }
+
+    private void OnCollapseDelayTimerTick(object? sender, EventArgs e)
+    {
+        _collapseDelayTimer.Stop();
+
+        // Double check mouse is not currently over window, quick actions bar, or file dock
+        if (IsMouseOver || QuickActionsBar.IsMouseOver || (FileDockPanel != null && FileDockPanel.IsMouseOver))
+        {
+            return;
+        }
+
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            return;
+        }
+
+        if (_isFileDockOpen)
+        {
+            // If 0 files or temporary, collapse to idle!
+            if (_fileDockService.Items.Count == 0 || _fileDockService.CurrentMode == FileDockMode.Temporary)
+            {
+                CloseFileDock(toQuickActions: false);
+                return;
+            }
+
+            if (_fileDockService.CurrentMode == FileDockMode.Pinned)
+            {
+                return;
+            }
+        }
+
+        if (_isQuickActionsOpen && !_isTransitioningToFullExpand && !_isHoverCollapsing)
+        {
+            ExecuteHoverCollapse();
+        }
+    }
+
+    private void ExecuteHoverCollapse()
+    {
+        CancelCollapseDelay();
+        if (_isTransitioningToFullExpand || _isHoverCollapsing || !_isQuickActionsOpen) return;
+
+        if (_isFileDockOpen)
+        {
+            if (FileDockPanel != null && FileDockPanel.IsDraggingOut) return;
+
+            // If items exist and pinned, keep open
+            if (_fileDockService.CurrentMode == FileDockMode.Pinned && _fileDockService.Items.Count > 0)
+            {
+                return;
+            }
+
+            CloseFileDock(toQuickActions: false);
+            return;
+        }
+
+        _isHoverCollapsing = true;
+        _isQuickActionsOpen = false;
+        OrbitLogger.Info(LogCategory, "Mouse left quick actions island. Collapsing to idle.");
+
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+        // Hide quick actions
+        QuickActionsBar.IsHitTestVisible = false;
+        var actionsFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+        QuickActionsBar.BeginAnimation(OpacityProperty, actionsFadeOut);
+
+        var duration = TimeSpan.FromMilliseconds(220);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+        var widthAnim = new DoubleAnimation(CollapsedWidth, duration) { EasingFunction = ease };
+        var heightAnim = new DoubleAnimation(CollapsedHeight, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+        // Restore mascot eyes & smile
+        MascotContainerGrid.Visibility = Visibility.Visible;
+        if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+        {
+            PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(180));
+        }
+        var mascotFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(60),
+            EasingFunction = ease
+        };
+        MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeIn);
+
+        widthAnim.Completed += (s, e) =>
+        {
+            Width = CollapsedWidth;
+            Height = CollapsedHeight;
+            Left = targetLeft;
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+            QuickActionsBar.Visibility = Visibility.Collapsed;
+            MascotContainerGrid.IsHitTestVisible = true;
+            MascotContainerGrid.Opacity = 1.0;
+
+            _isHoverCollapsing = false;
+            _isHovering = false;
+
+            _overlayService.ReapplyTopmost(_hwnd);
+            OrbitLogger.Info(LogCategory, "Quick Actions collapsed back to idle.");
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(HeightProperty, heightAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+    }
+
+    #region File Dock Operations & Drag-and-Drop
+
+    public void OpenFileDock(FileDockMode mode)
+    {
+        if (_isFileDockTransitioning) return;
+        _isFileDockTransitioning = true;
+        _fileDockService.CurrentMode = mode;
+
+        CancelHoverTimer();
+        CancelCollapseDelay();
+        OrbitLogger.Info(LogCategory, $"Opening File Dock in {mode} mode.");
+
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
+
+        var duration = TimeSpan.FromMilliseconds(240);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        // 1. Ensure QuickActionsBar and FileDockPanel are visible
+        QuickActionsBar.Visibility = Visibility.Visible;
+        QuickActionsBar.IsHitTestVisible = true;
+        QuickActionsBar.Opacity = 1.0;
+
+        FileDockPanel.Visibility = Visibility.Visible;
+        FileDockPanel.IsHitTestVisible = true;
+
+        // Visual indicator on File Dock quick action button
+        HighlightFileDockButton(true);
+
+        // 2. Animate dimensions
+        var widthAnim = new DoubleAnimation(QuickActionsWidth, duration) { EasingFunction = ease };
+        var heightAnim = new DoubleAnimation(FileDockTotalHeight, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+        var dockFadeIn = new DoubleAnimation(1.0, duration) { EasingFunction = ease };
+
+        if (MascotContainerGrid.Visibility == Visibility.Visible && MascotContainerGrid.Opacity > 0.0)
+        {
+            PillMascot.GracefullyCloseEyes(TimeSpan.FromMilliseconds(180));
+            var mascotFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(140)) { EasingFunction = ease };
+            MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeOut);
+        }
+
+        heightAnim.Completed += (s, e) =>
+        {
+            Width = QuickActionsWidth;
+            Height = FileDockTotalHeight;
+            Left = targetLeft;
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            UpdateUnifiedIslandGeometry(QuickActionsWidth, FileDockTotalHeight);
+
+            MascotContainerGrid.Visibility = Visibility.Collapsed;
+            MascotContainerGrid.IsHitTestVisible = false;
+
+            FileDockPanel.Opacity = 1.0;
+            _isFileDockOpen = true;
+            _isQuickActionsOpen = true;
+            _isFileDockTransitioning = false;
+
+            _overlayService.ReapplyTopmost(_hwnd);
+            OrbitLogger.Info(LogCategory, $"File Dock opened successfully in {mode} mode.");
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(HeightProperty, heightAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+        FileDockPanel.BeginAnimation(OpacityProperty, dockFadeIn);
+    }
+
+    public void CloseFileDock(bool toQuickActions)
+    {
+        if (_isFileDockTransitioning) return;
+        _isFileDockTransitioning = true;
+        _fileDockService.CurrentMode = FileDockMode.Closed;
+
+        HighlightFileDockButton(false);
+        OrbitLogger.Info(LogCategory, $"Closing File Dock (toQuickActions: {toQuickActions}).");
+
+        var duration = TimeSpan.FromMilliseconds(220);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+        FileDockPanel.IsHitTestVisible = false;
+        var dockFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(130));
+        FileDockPanel.BeginAnimation(OpacityProperty, dockFadeOut);
+
+        if (toQuickActions)
+        {
+            var heightAnim = new DoubleAnimation(QuickActionsHeight, duration) { EasingFunction = ease };
+
+            heightAnim.Completed += (s, e) =>
+            {
+                Height = QuickActionsHeight;
+                BeginAnimation(HeightProperty, null);
+                UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
+
+                FileDockPanel.Visibility = Visibility.Collapsed;
+                _isFileDockOpen = false;
+                _isFileDockTransitioning = false;
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "File Dock closed back to Quick Actions bar.");
+            };
+
+            BeginAnimation(HeightProperty, heightAnim);
+        }
+        else
+        {
+            var primary = _monitorService.GetPrimaryMonitor();
+            var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+            QuickActionsBar.IsHitTestVisible = false;
+            var actionsFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+            QuickActionsBar.BeginAnimation(OpacityProperty, actionsFadeOut);
+
+            var widthAnim = new DoubleAnimation(CollapsedWidth, duration) { EasingFunction = ease };
+            var heightAnim = new DoubleAnimation(CollapsedHeight, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+            MascotContainerGrid.Visibility = Visibility.Visible;
+            if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+            {
+                PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(180));
+            }
+            var mascotFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+            {
+                BeginTime = TimeSpan.FromMilliseconds(60),
+                EasingFunction = ease
+            };
+            MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeIn);
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = CollapsedWidth;
+                Height = CollapsedHeight;
+                Left = targetLeft;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+
+                UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                FileDockPanel.Visibility = Visibility.Collapsed;
+                QuickActionsBar.Visibility = Visibility.Collapsed;
+                MascotContainerGrid.IsHitTestVisible = true;
+                MascotContainerGrid.Opacity = 1.0;
+
+                _isFileDockOpen = false;
+                _isQuickActionsOpen = false;
+                _isHovering = false;
+                _isFileDockTransitioning = false;
+
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "File Dock closed completely to idle.");
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(HeightProperty, heightAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+        }
+    }
+
+    private void HighlightFileDockButton(bool active)
+    {
+        if (BtnQuickFileDock.Template?.FindName("Bg", BtnQuickFileDock) is Border border)
+        {
+            border.Background = active
+                ? new SolidColorBrush(System.Windows.Media.Color.FromArgb(0x35, 0xA8, 0x55, 0xF7))
+                : Brushes.Transparent;
+        }
+    }
+
+    private void OnFileDockButtonClicked(object sender, RoutedEventArgs e)
+    {
+        if (_isFileDockTransitioning) return;
+
+        if (_isFileDockOpen && _fileDockService.CurrentMode == FileDockMode.Pinned)
+        {
+            CloseFileDock(toQuickActions: true);
+        }
+        else
+        {
+            OpenFileDock(FileDockMode.Pinned);
+        }
+    }
+
+    private void OnFileDockPinToggleRequested()
+    {
+        if (_isFileDockTransitioning) return;
+
+        if (_isFileDockOpen && _fileDockService.CurrentMode == FileDockMode.Pinned)
+        {
+            CloseFileDock(toQuickActions: true);
+        }
+        else
+        {
+            OpenFileDock(FileDockMode.Pinned);
+        }
+    }
+
+    private void OnFileDockCloseRequested()
+    {
+        if (_isFileDockTransitioning) return;
+        CloseFileDock(toQuickActions: true);
+    }
+
+    private void OnWindowPreviewDragEnter(object sender, DragEventArgs e)
+    {
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+
+            if (!_isFileDockOpen)
+            {
+                OpenFileDock(FileDockMode.Temporary);
+            }
+            FileDockPanel?.SetDragPreviewActive(true);
+        }
+    }
+
+    private void OnWindowPreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+            FileDockPanel?.SetDragPreviewActive(true);
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+        }
+    }
+
+    private void OnWindowPreviewDragLeave(object sender, DragEventArgs e)
+    {
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            return;
+        }
+
+        var pos = e.GetPosition(this);
+        if (pos.X < 0 || pos.Y < 0 || pos.X > ActualWidth || pos.Y > ActualHeight)
+        {
+            FileDockPanel?.SetDragPreviewActive(false);
+
+            if (_fileDockService.CurrentMode == FileDockMode.Temporary && FileDockPanel?.IsDraggingOut != true)
+            {
+                CloseFileDock(toQuickActions: false);
+            }
+        }
+    }
+
+    private void OnWindowDrop(object sender, DragEventArgs e)
+    {
+        if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
+        {
+            return;
+        }
+
+        FileDockPanel?.SetDragPreviewActive(false);
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
+                _fileDockService.AddFiles(files);
+                e.Handled = true;
+                OrbitLogger.Info(LogCategory, $"Staged {files.Length} file(s) into File Dock from window drop.");
+            }
+        }
+    }
+
+    #endregion
+
+    private void OnFullExpandClicked(object sender, RoutedEventArgs e)
+    {
+        if (_isTransitioningToFullExpand) return;
+        _isTransitioningToFullExpand = true;
+
+        CancelHoverTimer();
+        CancelCollapseDelay();
+        OrbitLogger.Info(LogCategory, "Full Expand clicked from Quick Actions.");
+
+        if (_isFileDockOpen)
+        {
+            FileDockPanel.Visibility = Visibility.Collapsed;
+            FileDockPanel.Opacity = 0.0;
+            _isFileDockOpen = false;
+            _fileDockService.CurrentMode = FileDockMode.Closed;
+        }
+
+        // 1. Immediately hide quick actions bar
+        QuickActionsBar.IsHitTestVisible = false;
+        QuickActionsBar.BeginAnimation(OpacityProperty, null);
+        QuickActionsBar.Opacity = 0.0;
+        QuickActionsBar.Visibility = Visibility.Collapsed;
+
+        // 2. Restore mascot eyes and show mascot container
+        MascotContainerGrid.Visibility = Visibility.Visible;
+        MascotContainerGrid.IsHitTestVisible = true;
+        MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+        MascotContainerGrid.Opacity = 1.0;
+        if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+        {
+            PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(150));
+        }
+        PillMascot.IsExpanded = true;
+
+        _isQuickActionsOpen = false;
+
+        // 3. Smooth continuous transition into existing full ORBIT interface:
+        // Window expands from (310, 38) -> Stage 1: Width 310 -> 480 (ExpandedWidth)
+        // -> Stage 2: Height 38 -> targetExpandedHeight (CalculateHomeDesiredHeight)
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (expandedLeft, topY) = _monitorService.GetTopCenterPosition(primary, ExpandedWidth, TopMargin);
+
+        // Prep ExpandedView
+        ExpandedView.Visibility = Visibility.Visible;
+        ExpandedView.Opacity = 0.0;
+        IslandPanel.SetBodyOpacity(0.0);
+
+        if (_currentAgentState == Orbit.Models.AgentState.Working)
+        {
+            StartBinaryStreamAnimation();
+            PillMascot.SetAiState(Orbit.Models.AgentState.Working, _currentAgentMessage);
+        }
+
+        var stage1Duration = TimeSpan.FromMilliseconds(180);
+        var stage2Duration = TimeSpan.FromMilliseconds(240);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        // STAGE 1: Width expands 310 -> 480
+        var widthAnim = new DoubleAnimation(ExpandedWidth, stage1Duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(expandedLeft, stage1Duration) { EasingFunction = ease };
+
+        widthAnim.Completed += (s1, e1) =>
+        {
+            double targetExpandedHeight = IslandPanel.CalculateHomeDesiredHeight();
+
+            // STAGE 2: Height expands 38 -> targetExpandedHeight downwards
+            var heightAnim = new DoubleAnimation(targetExpandedHeight, stage2Duration) { EasingFunction = ease };
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = ease };
+            ExpandedView.BeginAnimation(OpacityProperty, fadeIn);
+            IslandPanel.AnimateBodyOpacity(1.0, TimeSpan.FromMilliseconds(200));
+
+            heightAnim.Completed += (s2, e2) =>
+            {
+                Width = ExpandedWidth;
+                Height = targetExpandedHeight;
+                Left = expandedLeft;
+                Top = topY;
+
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+
+                UpdateUnifiedIslandGeometry(ExpandedWidth, targetExpandedHeight);
+
+                _lifecycleService.SetState(CompanionState.Expanded);
+                _isTransitioningToFullExpand = false;
+                Activate();
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "Transition from Quick Actions to full ORBIT panel completed.");
+            };
+
+            BeginAnimation(HeightProperty, heightAnim);
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(LeftProperty, leftAnim);
     }
 
     #endregion
@@ -500,6 +1513,7 @@ public partial class MainWindow : Window
         if (_currentAgentState == Orbit.Models.AgentState.Working)
         {
             StartBinaryStreamAnimation();
+            PillMascot.SetAiState(Orbit.Models.AgentState.Working, _currentAgentMessage);
         }
 
         var stage1Duration = TimeSpan.FromMilliseconds(220);
@@ -617,6 +1631,10 @@ public partial class MainWindow : Window
         if (width < 60 || height < 20) return;
 
         var (bgGeom, outlineGeom, notchShelfGeom) = BuildContourGeometries(width, height);
+        if (MascotNotchPermanentBg != null)
+        {
+            MascotNotchPermanentBg.Data = bgGeom;
+        }
         if (CollapsedNotchBg != null)
         {
             CollapsedNotchBg.Data = bgGeom;
@@ -634,35 +1652,57 @@ public partial class MainWindow : Window
     private (Geometry bg, Geometry outline, Geometry notchShelf) BuildContourGeometries(double width, double height)
     {
         double cx = width / 2.0;
-        double x1 = cx - 62.0;
-        double x2 = cx + 62.0;
 
         // Dedicated notch shelf line: faint indication of the mascot notch boundary
         var notchShelf = new StreamGeometry();
         using (var ctx = notchShelf.Open())
         {
-            ctx.BeginFigure(new Point(x1, 0), isFilled: false, isClosed: false);
-            ctx.BezierTo(new Point(cx - 55, 0), new Point(cx - 47, 7), new Point(cx - 44, 14), true, true);
-            ctx.BezierTo(new Point(cx - 41, 21), new Point(cx - 34, 30), new Point(cx - 26, 30), true, true);
-            ctx.LineTo(new Point(cx + 26, 30), true, true);
-            ctx.BezierTo(new Point(cx + 34, 30), new Point(cx + 41, 21), new Point(cx + 44, 14), true, true);
-            ctx.BezierTo(new Point(cx + 47, 7), new Point(cx + 55, 0), new Point(x2, 0), true, true);
-        }
-        notchShelf.Freeze();
-
-        if (width <= 165.0 && height <= 42.0)
-        {
-            // Exact approved compact notch coordinates centered at cx = 80
-            var bg = new StreamGeometry();
-            using (var ctx = bg.Open())
+            if (height <= 46.0)
             {
-                ctx.BeginFigure(new Point(0, 0), isFilled: true, isClosed: true);
-                ctx.LineTo(new Point(x1, 0), true, true);
+                double shelfY = Math.Min(35.0, height - 8.0);
+                double y0 = shelfY * (7.0 / 30.0);
+                double y1 = shelfY * (14.0 / 30.0);
+                double y2 = shelfY * (21.0 / 30.0);
+
+                ctx.BeginFigure(new Point(18, 0), isFilled: false, isClosed: false);
+                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
+                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
+                ctx.LineTo(new Point(width - 54, shelfY), true, true);
+                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
+                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
+            }
+            else
+            {
+                double x1 = cx - 62.0;
+                double x2 = cx + 62.0;
+                ctx.BeginFigure(new Point(x1, 0), isFilled: false, isClosed: false);
                 ctx.BezierTo(new Point(cx - 55, 0), new Point(cx - 47, 7), new Point(cx - 44, 14), true, true);
                 ctx.BezierTo(new Point(cx - 41, 21), new Point(cx - 34, 30), new Point(cx - 26, 30), true, true);
                 ctx.LineTo(new Point(cx + 26, 30), true, true);
                 ctx.BezierTo(new Point(cx + 34, 30), new Point(cx + 41, 21), new Point(cx + 44, 14), true, true);
                 ctx.BezierTo(new Point(cx + 47, 7), new Point(cx + 55, 0), new Point(x2, 0), true, true);
+            }
+        }
+        notchShelf.Freeze();
+
+        if (height <= 46.0)
+        {
+            // Exact approved compact notch coordinates centered & horizontally expanded for Quick Actions (height <= 46)
+            double shelfY = Math.Min(35.0, height - 8.0);
+            double y0 = shelfY * (7.0 / 30.0);
+            double y1 = shelfY * (14.0 / 30.0);
+            double y2 = shelfY * (21.0 / 30.0);
+
+            var bg = new StreamGeometry();
+            using (var ctx = bg.Open())
+            {
+                ctx.BeginFigure(new Point(0, 0), isFilled: true, isClosed: true);
+                ctx.LineTo(new Point(18, 0), true, true);
+                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
+                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
+                ctx.LineTo(new Point(width - 54, shelfY), true, true);
+                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
+                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
                 ctx.LineTo(new Point(width, 0), true, true);
             }
             bg.Freeze();
@@ -671,12 +1711,12 @@ public partial class MainWindow : Window
             using (var ctx = outline.Open())
             {
                 ctx.BeginFigure(new Point(0, 0), isFilled: false, isClosed: false);
-                ctx.LineTo(new Point(x1, 0), true, true);
-                ctx.BezierTo(new Point(cx - 55, 0), new Point(cx - 47, 7), new Point(cx - 44, 14), true, true);
-                ctx.BezierTo(new Point(cx - 41, 21), new Point(cx - 34, 30), new Point(cx - 26, 30), true, true);
-                ctx.LineTo(new Point(cx + 26, 30), true, true);
-                ctx.BezierTo(new Point(cx + 34, 30), new Point(cx + 41, 21), new Point(cx + 44, 14), true, true);
-                ctx.BezierTo(new Point(cx + 47, 7), new Point(cx + 55, 0), new Point(x2, 0), true, true);
+                ctx.LineTo(new Point(18, 0), true, true);
+                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
+                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
+                ctx.LineTo(new Point(width - 54, shelfY), true, true);
+                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
+                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
                 ctx.LineTo(new Point(width, 0), true, true);
             }
             outline.Freeze();

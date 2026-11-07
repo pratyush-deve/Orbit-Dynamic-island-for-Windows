@@ -1,0 +1,348 @@
+<UserControl x:Class="Orbit.UI.Panels.FileDockView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:models="clr-namespace:Orbit.Models"
+             mc:Ignorable="d" 
+             d:DesignHeight="106" d:DesignWidth="310"
+             HorizontalAlignment="Stretch"
+             VerticalAlignment="Stretch"
+             Background="Transparent">
+
+    <UserControl.Resources>
+        <!-- Sleek, minimal horizontal scrollbar style -->
+        <Style x:Key="MinimalHorizontalScrollThumb" TargetType="{x:Type Thumb}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="ThumbBorder"
+                                Background="#35A855F7"
+                                CornerRadius="2"
+                                Height="3"
+                                VerticalAlignment="Center"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#80C084FC"/>
+                                <Setter TargetName="ThumbBorder" Property="Height" Value="4"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="#B0E9D5FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="MinimalHorizontalScrollBar" TargetType="{x:Type ScrollBar}">
+            <Setter Property="Orientation" Value="Horizontal"/>
+            <Setter Property="Height" Value="6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid Background="Transparent">
+                            <Track x:Name="PART_Track" IsDirectionReversed="False">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource MinimalHorizontalScrollThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- Main File Dock Layout -->
+    <Grid Margin="10,0,10,6" Background="Transparent" AllowDrop="True" Drop="OnFileDockDrop" DragOver="OnFileDockDragOver" DragLeave="OnFileDockDragLeave">
+        <Grid.RowDefinitions>
+            <!-- Row 0: Dock Header (Title, Count Badge, Close Button) -->
+            <RowDefinition Height="18"/>
+            <!-- Row 1: Content Area (Files or Empty Dropzone) -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 1. Header Toolbar -->
+        <Grid Grid.Row="0" Margin="2,0,2,2" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                <TextBlock Text="FILE DOCK"
+                           FontFamily="Segoe UI, Inter"
+                           FontSize="9"
+                           FontWeight="Bold"
+                           Foreground="#C084FC"
+                           VerticalAlignment="Center">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.4"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <!-- Staged Items Count Badge -->
+                <Border x:Name="BadgeBorder"
+                        Background="#25163D"
+                        BorderBrush="#40A855F7"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Padding="4,0"
+                        Margin="6,0,0,0"
+                        VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtItemCount"
+                               Text="0"
+                               FontFamily="Segoe UI, Inter"
+                               FontSize="8"
+                               FontWeight="SemiBold"
+                               Foreground="#E9D5FF"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Pin Icon Button (Colored pin icon indicating pinned state; no text, no cross) -->
+            <Button x:Name="BtnPinToggle"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Width="18" Height="18"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Cursor="Hand"
+                    ToolTip="Pinned (Click to unpin)"
+                    Click="OnPinToggleClicked">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="PinBg" Background="Transparent" CornerRadius="3">
+                            <!-- Pushpin Glyph -->
+                            <Path x:Name="PinGlyph"
+                                  Data="M 5,2 L 11,2 L 11,3.5 L 10,4.5 L 10,7.5 L 12,9 L 12,10 L 8.5,10 L 8,14.5 L 7.5,10 L 4,10 L 4,9 L 6,7.5 L 6,4.5 L 5,3.5 Z"
+                                  Fill="#C084FC"
+                                  Stroke="#E9D5FF"
+                                  StrokeThickness="0.6"
+                                  StrokeLineJoin="Round"
+                                  Width="11" Height="13"
+                                  Stretch="Uniform"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center">
+                                <Path.Effect>
+                                    <DropShadowEffect x:Name="PinGlow" Color="#A855F7" BlurRadius="6" ShadowDepth="0" Opacity="0.85"/>
+                                </Path.Effect>
+                            </Path>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="PinBg" Property="Background" Value="#25A855F7"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+
+        <!-- 2. Content Area -->
+        <Grid Grid.Row="1">
+            <!-- A. Empty State (Visible when 0 staged files and no drag-over) -->
+            <Border x:Name="EmptyStateBorder"
+                    Background="#140C24"
+                    BorderBrush="#35A855F7"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Margin="0,2,0,0"
+                    Visibility="Visible"
+                    IsHitTestVisible="False">
+                <StackPanel Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <!-- Subtle Drop Tray Icon -->
+                    <Path Data="M 3,7 L 3,15 C 3,16 4,17 5,17 L 17,17 C 18,17 19,16 19,15 L 19,7 M 7,10 L 11,14 L 15,10 M 11,3 L 11,13"
+                          Stroke="#7C3AED"
+                          StrokeThickness="1.3"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          StrokeLineJoin="Round"
+                          Width="14" Height="14"
+                          Stretch="Uniform"
+                          VerticalAlignment="Center"
+                          Margin="0,0,8,0"/>
+                    <TextBlock Text="Drop files here to stage"
+                               FontFamily="Segoe UI, Inter"
+                               FontSize="9.5"
+                               Foreground="#8B5CF6"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- B. Horizontal ScrollViewer with File Cards -->
+            <ScrollViewer x:Name="FileScrollViewer"
+                          VerticalScrollBarVisibility="Disabled"
+                          HorizontalScrollBarVisibility="Auto"
+                          CanContentScroll="False"
+                          PanningMode="HorizontalOnly"
+                          Focusable="False"
+                          Background="Transparent"
+                          Margin="0,1,0,0"
+                          Visibility="Collapsed"
+                          PreviewMouseWheel="OnFileScrollViewerPreviewMouseWheel">
+                <ScrollViewer.Resources>
+                    <Style TargetType="{x:Type ScrollBar}" BasedOn="{StaticResource MinimalHorizontalScrollBar}"/>
+                </ScrollViewer.Resources>
+
+                <ItemsControl x:Name="ItemsFileCards"
+                              HorizontalAlignment="Left"
+                              VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:FileDockItem}">
+                            <!-- File Card: Single Horizontal Item -->
+                            <Border x:Name="CardBorder"
+                                    Width="62" Height="74"
+                                    Margin="0,0,6,0"
+                                    Background="#1A102E"
+                                    BorderBrush="#30A855F7"
+                                    BorderThickness="1"
+                                    CornerRadius="7"
+                                    Cursor="Hand"
+                                    PreviewMouseLeftButtonDown="OnCardPreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="OnCardPreviewMouseMove">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.15"/>
+                                </Border.Effect>
+                                <Grid>
+                                    <!-- Remove Card Button (top right) -->
+                                    <Button x:Name="BtnRemoveCard"
+                                            Width="14" Height="14"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Top"
+                                            Margin="0,2,2,0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Cursor="Hand"
+                                            ToolTip="Remove reference"
+                                            Click="OnRemoveCardClicked"
+                                            Tag="{Binding}">
+                                        <Button.Template>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="RemoveBg" Background="#351848" CornerRadius="3">
+                                                    <Path Data="M 3,3 L 9,9 M 9,3 L 3,9"
+                                                          Stroke="#D8B4FE"
+                                                          StrokeThickness="1.1"
+                                                          StrokeStartLineCap="Round"
+                                                          StrokeEndLineCap="Round"
+                                                          Width="7" Height="7"
+                                                          Stretch="Uniform"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="RemoveBg" Property="Background" Value="#A855F7"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Button.Template>
+                                    </Button>
+
+                                    <!-- Main Card Content -->
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="2,4,2,2">
+                                        <!-- File Icon Image -->
+                                        <Grid Width="28" Height="28" HorizontalAlignment="Center">
+                                            <Image Source="{Binding Icon}"
+                                                   Width="26" Height="26"
+                                                   Stretch="Uniform"
+                                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                            <!-- Fallback Folder/File glyph if Icon is null -->
+                                            <Path Data="M 2,4 C 2,3 3,2 4,2 L 8,2 L 10,4 L 18,4 C 19,4 20,5 20,6 L 20,16 C 20,17 19,18 18,18 L 4,18 C 3,18 2,17 2,16 Z"
+                                                  Stroke="#C084FC"
+                                                  Fill="#30A855F7"
+                                                  StrokeThickness="1.1"
+                                                  Width="20" Height="20"
+                                                  Stretch="Uniform"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center">
+                                                <Path.Style>
+                                                    <Style TargetType="Path">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Icon}" Value="{x:Null}">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Path.Style>
+                                            </Path>
+                                        </Grid>
+
+                                        <!-- Truncated File Name -->
+                                        <TextBlock Text="{Binding FileName}"
+                                                   FontFamily="Segoe UI, Inter"
+                                                   FontSize="8.5"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#F3E8FF"
+                                                   TextAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   TextWrapping="Wrap"
+                                                   Height="24"
+                                                   Margin="1,3,1,0"/>
+
+                                        <!-- File Size / Type -->
+                                        <TextBlock Text="{Binding FileSizeFormatted}"
+                                                   FontFamily="Segoe UI, Inter"
+                                                   FontSize="7.5"
+                                                   Foreground="#9CA3AF"
+                                                   TextAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="1,0,1,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <DataTemplate.Triggers>
+                                <Trigger SourceName="CardBorder" Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="CardBorder" Property="Background" Value="#251640"/>
+                                    <Setter TargetName="CardBorder" Property="BorderBrush" Value="#A855F7"/>
+                                    <Setter TargetName="CardBorder" Property="Effect">
+                                        <Setter.Value>
+                                            <DropShadowEffect Color="#C084FC" BlurRadius="8" ShadowDepth="0" Opacity="0.45"/>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Trigger>
+                            </DataTemplate.Triggers>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- C. Active Drag-In Drop Preview Overlay (Animated glow indicator when incoming files hovered) -->
+            <Border x:Name="DragPreviewOverlay"
+                    Background="#301A48"
+                    BorderBrush="#C084FC"
+                    BorderThickness="1.5"
+                    CornerRadius="8"
+                    Margin="0,2,0,0"
+                    Visibility="Collapsed"
+                    IsHitTestVisible="False">
+                <Border.Effect>
+                    <DropShadowEffect Color="#C084FC" BlurRadius="10" ShadowDepth="0" Opacity="0.75"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Path Data="M 12,4 L 12,20 M 4,12 L 20,12"
+                          Stroke="#E9D5FF"
+                          StrokeThickness="2"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Width="14" Height="14"
+                          Stretch="Uniform"
+                          Margin="0,0,8,0"/>
+                    <TextBlock Text="Release to add to File Dock"
+                               FontFamily="Segoe UI, Inter"
+                               FontSize="10"
+                               FontWeight="SemiBold"
+                               Foreground="#FFFFFF"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -4,6 +4,7 @@ using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
 using Orbit.Services.DevWorkspace;
+using Orbit.Services.FileDock;
 using Orbit.Services.Hubs;
 using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
@@ -58,6 +59,7 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<IIconExtractorService, IconExtractorService>();
         services.AddSingleton<IAppDiscoveryService, AppDiscoveryService>();
         services.AddSingleton<IDevWorkspaceService, DevWorkspaceService>();
+        services.AddSingleton<IFileDockService, FileDockService>();
 
         // 6. Application Hubs (Social Hub & Work Hub)
         services.AddSingleton<INotificationService, NotificationService>();
