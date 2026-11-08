@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Orbit.Core;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.Voice;
 
 namespace Orbit;
 
@@ -93,6 +94,20 @@ public partial class App : Application
         var lifecycleService = _orbitApp.GetService<IWindowLifecycleService>();
         var trayService = _orbitApp.GetService<ISystemTrayService>();
         var mainWindow = _orbitApp.GetService<MainWindow>();
+
+        // Preload and warm up the Whisper model in background so first voice interaction has zero inference lag
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var whisperService = _orbitApp.GetService<IWhisperTranscriptionService>();
+                await whisperService.InitializeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                OrbitLogger.Warn(LogCategory, $"Background Whisper model initialization deferred: {ex.Message}");
+            }
+        });
 
         // 6. Connect IPC toggle and restore requests
         singleInstanceService.ToggleRequested += () =>

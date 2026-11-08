@@ -6,6 +6,11 @@ namespace Orbit.Services.Notes;
 public interface INotesService
 {
     /// <summary>
+    /// Event fired whenever notes content is updated.
+    /// </summary>
+    event Action<string>? NotesUpdated;
+
+    /// <summary>
     /// Loads saved notes content from local persistent storage.
     /// </summary>
     string LoadNotes();

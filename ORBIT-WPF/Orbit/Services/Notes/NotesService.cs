@@ -14,6 +14,8 @@ public sealed class NotesService : INotesService
     private readonly string _notesFilePath;
     private readonly object _lock = new();
 
+    public event Action<string>? NotesUpdated;
+
     public NotesService()
     {
         string orbitDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ORBIT");
@@ -54,6 +56,7 @@ public sealed class NotesService : INotesService
                 OrbitLogger.Error(LogCategory, $"Failed to save notes to '{_notesFilePath}': {ex.Message}");
             }
         }
+        NotesUpdated?.Invoke(content ?? string.Empty);
     }
 
     public async Task SaveNotesAsync(string content)
@@ -103,6 +106,7 @@ public sealed class NotesService : INotesService
                 OrbitLogger.Error(LogCategory, $"Failed to clear notes: {ex.Message}");
             }
         }
+        NotesUpdated?.Invoke(string.Empty);
     }
 }
 

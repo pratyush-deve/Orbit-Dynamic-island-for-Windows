@@ -1271,6 +1271,7 @@ public partial class ExpandedIsland : UserControl
         }
 
         IsInNotesView = true;
+        NotesPanel.RefreshNotes();
         SetTopLeftShortcutsVisible(false);
         NotesModeChanged?.Invoke(true);
 

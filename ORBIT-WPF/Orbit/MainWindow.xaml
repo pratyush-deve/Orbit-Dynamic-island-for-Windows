@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:mascot="clr-namespace:Orbit.UI.Mascot"
         xmlns:panels="clr-namespace:Orbit.UI.Panels"
+        xmlns:components="clr-namespace:Orbit.UI.Components"
         mc:Ignorable="d"
         Title="ORBIT"
         Icon="Assets/ORBIT.png"
@@ -282,7 +283,10 @@
                   Background="Transparent"
                   MouseEnter="OnQuickActionsMouseEnter"
                   MouseLeave="OnQuickActionsMouseLeave">
-                <StackPanel Orientation="Horizontal"
+                
+                <!-- Standard Hover Quick Actions Bar -->
+                <StackPanel x:Name="StandardQuickActionsPanel"
+                            Orientation="Horizontal"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Margin="0,0,0,8">
@@ -331,15 +335,17 @@
                     <!-- Subtle Separator -->
                     <Rectangle Width="1" Height="14" Fill="#30A855F7" VerticalAlignment="Center" Margin="5,0,5,0"/>
 
-                    <!-- 2. Voice Assistant (Mic Icon placeholder) -->
+                    <!-- 2. Voice Assistant (Mic Icon) -->
                     <Button x:Name="BtnQuickVoiceAssistant"
                             Width="36" Height="26"
                             Background="Transparent"
                             BorderThickness="0"
                             Padding="0"
-                            Cursor="Arrow"
+                            Cursor="Hand"
                             ToolTip="Voice Assistant"
-                            Focusable="False">
+                            Focusable="False"
+                            Click="OnVoiceAssistantButtonClicked"
+                            PreviewMouseLeftButtonDown="OnVoiceAssistantButtonPreviewMouseDown">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bg"
@@ -364,7 +370,7 @@
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Bg" Property="Background" Value="#15A855F7"/>
+                                        <Setter TargetName="Bg" Property="Background" Value="#25A855F7"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
@@ -469,6 +475,104 @@
                         </Button.Template>
                     </Button>
                 </StackPanel>
+
+                <!-- In-Place Voice Mode Overlay (Centered inside 310 DIP notch, 54px from left/right margins) -->
+                <Grid x:Name="VoiceModePanel"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center"
+                      Margin="56,0,56,8"
+                      Visibility="Collapsed"
+                      Opacity="0.0"
+                      IsHitTestVisible="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Active Glowing Microphone Icon on the Left -->
+                    <Border Grid.Column="0"
+                            Width="30" Height="26"
+                            Background="#22A855F7"
+                            BorderBrush="#A855F7"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Left"
+                            Cursor="Hand"
+                            ToolTip="Exit Voice Mode"
+                            PreviewMouseLeftButtonDown="OnVoiceMicIconPreviewMouseDown">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#C084FC" BlurRadius="8" ShadowDepth="0" Opacity="0.7"/>
+                        </Border.Effect>
+                        <Path Data="M 9,3 C 7.3,3 6,4.3 6,6 L 6,11 C 6,12.7 7.3,14 9,14 C 10.7,14 12,12.7 12,11 L 12,6 C 12,4.3 10.7,3 9,3 Z M 3,10 C 3,13.3 5.7,16 9,16 C 12.3,16 15,13.3 15,10 M 9,16 L 9,19 M 6,19 L 12,19"
+                              Stroke="#F3E8FF"
+                              StrokeThickness="1.5"
+                              StrokeLineJoin="Round"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center"
+                              Width="13" Height="16"
+                              Stretch="Uniform"/>
+                    </Border>
+
+                    <!-- Real-Time Audio Reactive Waveform -->
+                    <components:VoiceWaveformControl x:Name="VoiceWaveform"
+                                                     Grid.Column="1"
+                                                     Height="26"
+                                                     Margin="12,0,0,0"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Center"/>
+
+                    <!-- Processing / Transcription Animation (Processing state) -->
+                    <Grid x:Name="VoiceProcessingPanel"
+                          Grid.Column="1"
+                          Height="26"
+                          Margin="12,0,0,0"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Center"
+                          Visibility="Collapsed"
+                          Opacity="0.0">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <Ellipse x:Name="ProcessingDot1" Width="6" Height="6" Fill="#C084FC" Margin="3,0,3,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#C084FC" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <Ellipse x:Name="ProcessingDot2" Width="6" Height="6" Fill="#A855F7" Margin="3,0,3,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#A855F7" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <Ellipse x:Name="ProcessingDot3" Width="6" Height="6" Fill="#C084FC" Margin="3,0,3,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#C084FC" BlurRadius="6" ShadowDepth="0" Opacity="0.8"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Recognized Speech Text Display (Result state) -->
+                    <TextBlock x:Name="VoiceResultText"
+                               Grid.Column="1"
+                               Height="26"
+                               Margin="12,0,0,0"
+                               HorizontalAlignment="Left"
+                               VerticalAlignment="Center"
+                               FontSize="11.5"
+                               FontWeight="SemiBold"
+                               Foreground="#E9D5FF"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding RelativeSource={RelativeSource Self}, Path=Text}"
+                               Visibility="Collapsed"
+                               Opacity="0.0">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.6"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                </Grid>
             </Grid>
 
             <!-- 4.5 Staged File Dock Panel (Expands vertically below QuickActionsBar) -->

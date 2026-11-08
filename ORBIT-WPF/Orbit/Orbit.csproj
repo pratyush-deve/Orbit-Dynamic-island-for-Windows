@@ -30,6 +30,17 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageReference Include="System.Management" Version="10.0.14" />
+    <PackageReference Include="Whisper.net" Version="1.9.1" />
+    <PackageReference Include="Whisper.net.Runtime" Version="1.9.1" />
   </ItemGroup>
+
+  <Target Name="CopyWhisperRuntimesToPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <WhisperNativeFiles Include="$(TargetDir)runtimes\**\*.*" />
+      <WhisperWinX64Files Include="$(TargetDir)runtimes\win-x64\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WhisperNativeFiles)" DestinationFolder="$(PublishDir)runtimes\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(WhisperWinX64Files)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

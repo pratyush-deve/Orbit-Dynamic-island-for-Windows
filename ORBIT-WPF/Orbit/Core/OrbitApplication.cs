@@ -3,12 +3,15 @@ using Orbit.Integrations.Desktop;
 using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
+using Orbit.Services.Commands;
+using Orbit.Services.Commands.Handlers;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.FileDock;
 using Orbit.Services.Hubs;
 using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.Services.SystemMonitor;
+using Orbit.Services.Voice;
 
 namespace Orbit.Core;
 
@@ -78,6 +81,23 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<INotesService, NotesService>();
         services.AddSingleton<ISystemMonitorService, SystemMonitorService>();
 
+        // 8.5 Voice Assistant (WASAPI Audio Capture & Offline Whisper Transcription)
+        services.AddSingleton<IAudioCaptureService, WasapiAudioCaptureService>();
+        services.AddSingleton<IWhisperModelManager, WhisperModelManager>();
+        services.AddSingleton<IWhisperTranscriptionService, WhisperTranscriptionService>();
+        services.AddSingleton<IVoiceSessionManager, VoiceSessionManager>();
+
+        // 8.6 Voice Assistant Command Parsing & Execution
+        services.AddSingleton<AppRegistry>();
+        services.AddSingleton<ICommandParser, CommandParser>();
+        services.AddSingleton<ICommandHandler, AppLaunchHandler>();
+        services.AddSingleton<ICommandHandler, WebSearchHandler>();
+        services.AddSingleton<ICommandHandler, FileSearchHandler>();
+        services.AddSingleton<ICommandHandler, SystemControlHandler>();
+        services.AddSingleton<ICommandHandler, ScreenshotHandler>();
+        services.AddSingleton<ICommandHandler, NotesHandler>();
+        services.AddSingleton<IVoiceCommandExecutor, CommandExecutionService>();
+
         // 9. Windows
         services.AddSingleton<MainWindow>();
 
@@ -108,6 +128,7 @@ public sealed class OrbitApplication : IDisposable
             _serviceProvider.GetService<IAntigravityDatabaseObserver>()?.Dispose();
             _serviceProvider.GetService<IAntigravityProcessMonitor>()?.Dispose();
             _serviceProvider.GetService<IAntigravityTranscriptWatcher>()?.Dispose();
+            _serviceProvider.GetService<IVoiceSessionManager>()?.Dispose();
             _serviceProvider.Dispose();
         }
         catch (Exception ex)

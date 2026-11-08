@@ -54,12 +54,39 @@ public partial class NotesView : UserControl, IDisposable
 
     public void Initialize(INotesService? notesService = null)
     {
+        if (_notesService != null)
+        {
+            _notesService.NotesUpdated -= OnNotesServiceUpdated;
+        }
+
         if (notesService != null)
         {
             _notesService = notesService;
         }
 
+        if (_notesService != null)
+        {
+            _notesService.NotesUpdated += OnNotesServiceUpdated;
+        }
         LoadSavedContent();
+    }
+
+    public void RefreshNotes()
+    {
+        LoadSavedContent();
+    }
+
+    private void OnNotesServiceUpdated(string updatedContent)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_hasUnsavedChanges)
+            {
+                TxtEditor.Text = updatedContent;
+                TxtPlaceholder.Visibility = string.IsNullOrEmpty(updatedContent) ? Visibility.Visible : Visibility.Collapsed;
+                UpdateSaveIndicator(isSaving: false, statusText: "Saved");
+            }
+        });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -83,12 +110,13 @@ public partial class NotesView : UserControl, IDisposable
         SaveCurrentNotesSynchronously();
     }
 
-    private void LoadSavedContent()
+    public void LoadSavedContent()
     {
         try
         {
             string saved = _notesService.LoadNotes();
             TxtEditor.Text = saved;
+            _hasUnsavedChanges = false;
             TxtPlaceholder.Visibility = string.IsNullOrEmpty(saved) ? Visibility.Visible : Visibility.Collapsed;
             UpdateSaveIndicator(isSaving: false, statusText: "Saved");
         }

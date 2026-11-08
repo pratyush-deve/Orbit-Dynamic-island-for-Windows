@@ -10,12 +10,14 @@ using Orbit.Models;
 using Orbit.Platform.Windows;
 using Orbit.Services;
 using Orbit.Services.AiObserver;
+using Orbit.Services.Commands;
 using Orbit.Services.DevWorkspace;
 using Orbit.Services.FileDock;
 using Orbit.Services.Hubs;
 using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.Services.SystemMonitor;
+using Orbit.Services.Voice;
 using DragEventArgs = System.Windows.DragEventArgs;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DataObject = System.Windows.DataObject;
@@ -64,6 +66,9 @@ public partial class MainWindow : Window
     private readonly INotesService? _notesService;
     private readonly ISystemMonitorService? _systemMonitorService;
     private readonly IFileDockService _fileDockService;
+    private readonly IVoiceSessionManager _voiceSessionManager;
+    private readonly ICommandParser? _commandParser;
+    private readonly IVoiceCommandExecutor? _commandExecutor;
 
     private IntPtr _hwnd = IntPtr.Zero;
     private Orbit.Models.AgentState _currentAgentState = Orbit.Models.AgentState.Idle;
@@ -72,8 +77,11 @@ public partial class MainWindow : Window
     // File Dock & Quick Actions state management
     private bool _isFileDockOpen = false;
     private bool _isFileDockTransitioning = false;
+    private bool _isVoiceModeActive = false;
     public bool IsFileDockOpen => _isFileDockOpen;
+    public bool IsVoiceModeActive => _isVoiceModeActive;
     public IFileDockService FileDockService => _fileDockService;
+    public IVoiceSessionManager VoiceSessionManager => _voiceSessionManager;
 
     // Hover-based quick actions expansion state management
     private readonly DispatcherTimer _hoverTimer;
@@ -177,7 +185,10 @@ public partial class MainWindow : Window
         IWorkHubService? workHubService = null,
         INotesService? notesService = null,
         ISystemMonitorService? systemMonitorService = null,
-        IFileDockService? fileDockService = null)
+        IFileDockService? fileDockService = null,
+        IVoiceSessionManager? voiceSessionManager = null,
+        ICommandParser? commandParser = null,
+        IVoiceCommandExecutor? commandExecutor = null)
     {
         InitializeComponent();
 
@@ -197,6 +208,15 @@ public partial class MainWindow : Window
         _notesService = notesService;
         _systemMonitorService = systemMonitorService;
         _fileDockService = fileDockService ?? new FileDockService();
+        _voiceSessionManager = voiceSessionManager ?? new VoiceSessionManager(new WasapiAudioCaptureService());
+        _commandParser = commandParser;
+        _commandExecutor = commandExecutor;
+
+        // Wire voice session events
+        _voiceSessionManager.AudioLevelUpdated += OnVoiceAudioLevelUpdated;
+        _voiceSessionManager.StateChanged += OnVoiceSessionStateChanged;
+        _voiceSessionManager.UtteranceCompleted += OnVoiceUtteranceCompleted;
+        _voiceSessionManager.TranscriptionReceived += OnVoiceTranscriptionReceived;
 
         // Initialize 2-second continuous hover recognition timer
         _hoverTimer = new DispatcherTimer
@@ -423,6 +443,13 @@ public partial class MainWindow : Window
             }
         }
 
+        // CRITICAL: Do NOT collapse or exit if Voice Mode is actively listening!
+        if (_isVoiceModeActive)
+        {
+            _overlayService.ReapplyTopmost(_hwnd);
+            return;
+        }
+
         if (_isQuickActionsOpen && !_isTransitioningToFullExpand)
         {
             ExecuteHoverCollapse();
@@ -480,7 +507,12 @@ public partial class MainWindow : Window
             CancelHoverTimer();
             CancelCollapseDelay();
 
-            // Force close any open File Dock or Quick Actions bar
+            // Force close any open File Dock, Voice Assistant, or Quick Actions bar
+            if (_isVoiceModeActive)
+            {
+                ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+            }
+
             if (_isFileDockOpen)
             {
                 _isFileDockOpen = false;
@@ -541,6 +573,10 @@ public partial class MainWindow : Window
         OrbitLogger.Info(LogCategory, "Mascot is visible on screen. Hiding mascot.");
         CancelHoverTimer();
         CancelCollapseDelay();
+        if (_isVoiceModeActive)
+        {
+            ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+        }
         _lifecycleService.Hide();
     }
 
@@ -561,6 +597,11 @@ public partial class MainWindow : Window
                 case CompanionState.Hidden:
                     CancelHoverTimer();
                     CancelCollapseDelay();
+
+                    if (_isVoiceModeActive)
+                    {
+                        ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+                    }
 
                     if (_isFileDockOpen)
                     {
@@ -610,6 +651,11 @@ public partial class MainWindow : Window
                     _isHoverExpanding = false;
                     _isHoverCollapsing = false;
                     _isTransitioningToFullExpand = false;
+
+                    if (_isVoiceModeActive)
+                    {
+                        ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+                    }
 
                     if (_isFileDockOpen)
                     {
@@ -741,6 +787,12 @@ public partial class MainWindow : Window
             }
         }
 
+        // CRITICAL: While Voice Mode is actively listening, do NOT collapse on window mouse leave!
+        if (_isVoiceModeActive)
+        {
+            return;
+        }
+
         if (_isQuickActionsOpen && !_isTransitioningToFullExpand && !_isHoverCollapsing)
         {
             if (!IsMouseOver && !QuickActionsBar.IsMouseOver)
@@ -857,6 +909,17 @@ public partial class MainWindow : Window
         _isHoverExpanding = true;
         OrbitLogger.Info(LogCategory, $"Continuous {HoverActivationSeconds}-second hover detected. Expanding Quick Actions horizontally.");
 
+        // Guard: ensure StandardQuickActionsPanel is visible and VoiceModePanel is collapsed
+        VoiceModePanel.BeginAnimation(OpacityProperty, null);
+        VoiceModePanel.Visibility = Visibility.Collapsed;
+        VoiceModePanel.Opacity = 0.0;
+        VoiceModePanel.IsHitTestVisible = false;
+
+        StandardQuickActionsPanel.BeginAnimation(OpacityProperty, null);
+        StandardQuickActionsPanel.Visibility = Visibility.Visible;
+        StandardQuickActionsPanel.Opacity = 1.0;
+        StandardQuickActionsPanel.IsHitTestVisible = true;
+
         var primary = _monitorService.GetPrimaryMonitor();
         var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
 
@@ -928,6 +991,12 @@ public partial class MainWindow : Window
     private void OnQuickActionsMouseLeave(object sender, MouseEventArgs e)
     {
         if (!_isQuickActionsOpen || _isTransitioningToFullExpand || _isHoverCollapsing) return;
+
+        // CRITICAL: While Voice Mode is active, do not collapse when cursor leaves
+        if (_isVoiceModeActive)
+        {
+            return;
+        }
 
         // If dragging out, do not collapse
         if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
@@ -1024,6 +1093,9 @@ public partial class MainWindow : Window
     {
         CancelCollapseDelay();
         if (_isTransitioningToFullExpand || _isHoverCollapsing || !_isQuickActionsOpen) return;
+
+        // CRITICAL: While Voice Mode is active, do not collapse
+        if (_isVoiceModeActive) return;
 
         if (_isFileDockOpen)
         {
@@ -1484,6 +1556,483 @@ public partial class MainWindow : Window
 
         BeginAnimation(WidthProperty, widthAnim);
         BeginAnimation(LeftProperty, leftAnim);
+    }
+
+    #endregion
+
+    #region Voice Mode Operations & Waveform Integration
+
+    private DateTime _lastVoiceButtonClickTime = DateTime.MinValue;
+
+    private void OnVoiceAssistantButtonPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        HandleVoiceAssistantToggle();
+    }
+
+    private void OnVoiceAssistantButtonClicked(object sender, RoutedEventArgs e)
+    {
+        HandleVoiceAssistantToggle();
+    }
+
+    private void OnVoiceMicIconPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        HandleVoiceAssistantToggle();
+    }
+
+    private void HandleVoiceAssistantToggle()
+    {
+        if ((DateTime.UtcNow - _lastVoiceButtonClickTime).TotalMilliseconds < 250) return;
+        _lastVoiceButtonClickTime = DateTime.UtcNow;
+
+        if (_isVoiceModeActive)
+        {
+            OrbitLogger.Info(LogCategory, "Voice Assistant button clicked while voice mode active. Exiting voice mode.");
+            ExitVoiceMode(cancelCapture: true, returnToMascot: true);
+            return;
+        }
+
+        OrbitLogger.Info(LogCategory, "Voice Assistant button clicked. Activating Voice Mode.");
+        EnterVoiceMode();
+    }
+
+    /// <summary>
+    /// Enters In-Place Voice Mode inside the existing 310 DIP QuickActionsBar notch.
+    /// Fades out the other quick actions and displays the glowing mic + real-time reactive waveform.
+    /// </summary>
+    public void EnterVoiceMode()
+    {
+        if (_isVoiceModeActive || _isHoverCollapsing || _isTransitioningToFullExpand) return;
+
+        // If File Dock is open, close it cleanly first
+        if (_isFileDockOpen)
+        {
+            CloseFileDock(toQuickActions: true);
+        }
+
+        _isVoiceModeActive = true;
+        CancelCollapseDelay();
+
+        // 1. Smoothly fade out standard quick action buttons
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(120));
+        fadeOut.Completed += (s, e) =>
+        {
+            StandardQuickActionsPanel.Visibility = Visibility.Collapsed;
+            StandardQuickActionsPanel.IsHitTestVisible = false;
+
+            // 2. Reveal VoiceModePanel with animated waveform
+            VoiceModePanel.Visibility = Visibility.Visible;
+            VoiceModePanel.IsHitTestVisible = true;
+            _voiceResultTimer?.Stop();
+            StopProcessingAnimation();
+
+            if (VoiceProcessingPanel != null)
+            {
+                VoiceProcessingPanel.Visibility = Visibility.Collapsed;
+                VoiceProcessingPanel.Opacity = 0.0;
+            }
+            if (VoiceResultText != null)
+            {
+                VoiceResultText.BeginAnimation(OpacityProperty, null);
+                VoiceResultText.Visibility = Visibility.Collapsed;
+                VoiceResultText.Opacity = 0.0;
+                VoiceResultText.Text = string.Empty;
+            }
+
+            VoiceWaveform.Visibility = Visibility.Visible;
+            VoiceWaveform.Opacity = 1.0;
+            VoiceWaveform.StartRendering();
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140));
+            VoiceModePanel.BeginAnimation(OpacityProperty, fadeIn);
+
+            // 3. Start audio capture session
+            bool started = _voiceSessionManager.StartSession();
+            if (!started)
+            {
+                OrbitLogger.Warn(LogCategory, "Could not start voice session (hardware unavailable or access denied).");
+            }
+        };
+
+        StandardQuickActionsPanel.BeginAnimation(OpacityProperty, fadeOut);
+    }
+
+    /// <summary>
+    /// Exits Voice Mode and either restores the normal collapsed mascot (default when speech ends/times out)
+    /// or transitions back to the standard hover toolbar (if explicitly requested).
+    /// If immediate is true, resets all UI properties synchronously without starting animations (e.g. during Hide/Unhide).
+    /// </summary>
+    public void ExitVoiceMode(bool cancelCapture = false, bool returnToMascot = true, bool immediate = false)
+    {
+        if (!_isVoiceModeActive) return;
+        _isVoiceModeActive = false;
+
+        OrbitLogger.Info(LogCategory, $"Exiting Voice Mode (cancelCapture={cancelCapture}, returnToMascot={returnToMascot}, immediate={immediate}).");
+
+        // 1. Stop or cancel audio capture
+        if (cancelCapture)
+        {
+            _voiceSessionManager.CancelSession();
+        }
+        else
+        {
+            _voiceSessionManager.StopSession();
+        }
+
+        _voiceResultTimer?.Stop();
+        StopProcessingAnimation();
+
+        VoiceWaveform.StopRendering();
+        VoiceWaveform.Visibility = Visibility.Collapsed;
+
+        if (VoiceProcessingPanel != null)
+        {
+            VoiceProcessingPanel.Visibility = Visibility.Collapsed;
+            VoiceProcessingPanel.Opacity = 0.0;
+        }
+
+        if (VoiceResultText != null)
+        {
+            VoiceResultText.BeginAnimation(OpacityProperty, null);
+            VoiceResultText.Visibility = Visibility.Collapsed;
+            VoiceResultText.Opacity = 0.0;
+            VoiceResultText.Text = string.Empty;
+        }
+
+        // Always guarantee clean restoration of both panels
+        VoiceModePanel.BeginAnimation(OpacityProperty, null);
+        VoiceModePanel.Visibility = Visibility.Collapsed;
+        VoiceModePanel.Opacity = 0.0;
+        VoiceModePanel.IsHitTestVisible = false;
+
+        StandardQuickActionsPanel.BeginAnimation(OpacityProperty, null);
+        StandardQuickActionsPanel.Visibility = Visibility.Visible;
+        StandardQuickActionsPanel.Opacity = 1.0;
+        StandardQuickActionsPanel.IsHitTestVisible = true;
+
+        if (immediate)
+        {
+            var primary = _monitorService.GetPrimaryMonitor();
+            var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(LeftProperty, null);
+            Width = CollapsedWidth;
+            Left = targetLeft;
+            Top = topY;
+
+            QuickActionsBar.BeginAnimation(OpacityProperty, null);
+            QuickActionsBar.Visibility = Visibility.Collapsed;
+            QuickActionsBar.Opacity = 0.0;
+            QuickActionsBar.IsHitTestVisible = false;
+
+            _isHoverCollapsing = false;
+            _isHovering = false;
+            _isQuickActionsOpen = false;
+
+            MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+            MascotContainerGrid.Visibility = Visibility.Visible;
+            MascotContainerGrid.Opacity = 1.0;
+            MascotContainerGrid.IsHitTestVisible = true;
+            if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+            {
+                PillMascot.RestoreNormalEyes(TimeSpan.Zero);
+            }
+            return;
+        }
+
+        if (returnToMascot)
+        {
+            // Transition directly from Voice Mode to the normal collapsed mascot pill
+            _isHoverCollapsing = true;
+            _isQuickActionsOpen = false;
+
+            var primary = _monitorService.GetPrimaryMonitor();
+            var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+            // Hide quick actions & voice panel together
+            QuickActionsBar.IsHitTestVisible = false;
+
+            var actionsFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+            QuickActionsBar.BeginAnimation(OpacityProperty, actionsFadeOut);
+
+            var duration = TimeSpan.FromMilliseconds(220);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+            var widthAnim = new DoubleAnimation(CollapsedWidth, duration) { EasingFunction = ease };
+            var heightAnim = new DoubleAnimation(CollapsedHeight, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+            // Restore mascot eyes & smile
+            MascotContainerGrid.Visibility = Visibility.Visible;
+            if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+            {
+                PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(180));
+            }
+            var mascotFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+            {
+                BeginTime = TimeSpan.FromMilliseconds(60),
+                EasingFunction = ease
+            };
+            MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeIn);
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = CollapsedWidth;
+                Height = CollapsedHeight;
+                Left = targetLeft;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+
+                UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                QuickActionsBar.Visibility = Visibility.Collapsed;
+                QuickActionsBar.Opacity = 0.0;
+                VoiceModePanel.Visibility = Visibility.Collapsed;
+                VoiceModePanel.Opacity = 0.0;
+                StandardQuickActionsPanel.Visibility = Visibility.Visible;
+                StandardQuickActionsPanel.Opacity = 1.0;
+
+                MascotContainerGrid.IsHitTestVisible = true;
+                MascotContainerGrid.Opacity = 1.0;
+
+                _isHoverCollapsing = false;
+                _isHovering = false;
+
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "Voice Mode cleanly collapsed back to normal mascot.");
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(HeightProperty, heightAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+        }
+        else
+        {
+            // 2. Cross-fade from VoiceModePanel back to StandardQuickActionsPanel
+            var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(120));
+            fadeOut.Completed += (s, e) =>
+            {
+                VoiceModePanel.Visibility = Visibility.Collapsed;
+                VoiceModePanel.IsHitTestVisible = false;
+
+                StandardQuickActionsPanel.Visibility = Visibility.Visible;
+                StandardQuickActionsPanel.IsHitTestVisible = true;
+
+                var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140));
+                StandardQuickActionsPanel.BeginAnimation(OpacityProperty, fadeIn);
+            };
+
+            VoiceModePanel.BeginAnimation(OpacityProperty, fadeOut);
+        }
+    }
+
+    private DispatcherTimer? _voiceResultTimer;
+
+    private void StartProcessingAnimation()
+    {
+        if (VoiceProcessingPanel == null) return;
+
+        VoiceWaveform.StopRendering();
+        VoiceWaveform.Visibility = Visibility.Collapsed;
+
+        if (VoiceResultText != null)
+        {
+            VoiceResultText.BeginAnimation(OpacityProperty, null);
+            VoiceResultText.Visibility = Visibility.Collapsed;
+            VoiceResultText.Opacity = 0.0;
+            VoiceResultText.Text = string.Empty;
+        }
+
+        VoiceProcessingPanel.Visibility = Visibility.Visible;
+        VoiceProcessingPanel.Opacity = 1.0;
+
+        var anim1 = new DoubleAnimation(0.25, 1.0, TimeSpan.FromMilliseconds(450))
+        {
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+
+        var anim2 = new DoubleAnimation(0.25, 1.0, TimeSpan.FromMilliseconds(450))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(150),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+
+        var anim3 = new DoubleAnimation(0.25, 1.0, TimeSpan.FromMilliseconds(450))
+        {
+            BeginTime = TimeSpan.FromMilliseconds(300),
+            AutoReverse = true,
+            RepeatBehavior = RepeatBehavior.Forever,
+            EasingFunction = new SineEase { EasingMode = EasingMode.EaseInOut }
+        };
+
+        ProcessingDot1?.BeginAnimation(OpacityProperty, anim1);
+        ProcessingDot2?.BeginAnimation(OpacityProperty, anim2);
+        ProcessingDot3?.BeginAnimation(OpacityProperty, anim3);
+    }
+
+    private void StopProcessingAnimation()
+    {
+        if (VoiceProcessingPanel == null) return;
+
+        ProcessingDot1?.BeginAnimation(OpacityProperty, null);
+        ProcessingDot2?.BeginAnimation(OpacityProperty, null);
+        ProcessingDot3?.BeginAnimation(OpacityProperty, null);
+
+        VoiceProcessingPanel.Visibility = Visibility.Collapsed;
+        VoiceProcessingPanel.Opacity = 0.0;
+    }
+
+    private void OnVoiceAudioLevelUpdated(object? sender, float intensity)
+    {
+        // Dispatch to UI thread to update waveform
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_isVoiceModeActive)
+            {
+                VoiceWaveform.SetAudioIntensity(intensity);
+            }
+        }, DispatcherPriority.Render);
+    }
+
+    private void OnVoiceSessionStateChanged(object? sender, VoiceSessionState state)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            OrbitLogger.Info(LogCategory, $"MainWindow received VoiceSessionState: {state}");
+            if (state == VoiceSessionState.Processing)
+            {
+                if (_isVoiceModeActive)
+                {
+                    StartProcessingAnimation();
+                }
+            }
+            else if (state == VoiceSessionState.Cancelled || state == VoiceSessionState.Error)
+            {
+                if (_isVoiceModeActive)
+                {
+                    ExitVoiceMode(cancelCapture: false, returnToMascot: true);
+                }
+            }
+        });
+    }
+
+    private void OnVoiceUtteranceCompleted(object? sender, byte[] pcmData)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            OrbitLogger.Info(LogCategory, $"Voice utterance completed: {pcmData.Length} bytes captured in RAM for Whisper.");
+        });
+    }
+
+    private void OnVoiceTranscriptionReceived(object? sender, string text)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!_isVoiceModeActive) return;
+
+            StopProcessingAnimation();
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                OrbitLogger.Info(LogCategory, "Voice transcription was empty. Displaying 'Didn't catch that' feedback.");
+                VoiceResultText.Text = "Didn't catch that";
+                VoiceResultText.FontStyle = FontStyles.Italic;
+                VoiceResultText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC0, 0x84, 0xFC));
+                VoiceResultText.Visibility = Visibility.Visible;
+
+                var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(150));
+                VoiceResultText.BeginAnimation(OpacityProperty, fadeIn);
+
+                // Display gentle feedback for 2.5 seconds before smoothly returning to mascot
+                _voiceResultTimer?.Stop();
+                _voiceResultTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(2500)
+                };
+                _voiceResultTimer.Tick += (s, e) =>
+                {
+                    _voiceResultTimer.Stop();
+                    if (_isVoiceModeActive)
+                    {
+                        ExitVoiceMode(cancelCapture: false, returnToMascot: true);
+                    }
+                };
+                _voiceResultTimer.Start();
+                return;
+            }
+
+            OrbitLogger.Info(LogCategory, $"Displaying recognized speech text in voice panel: '{text}'");
+            VoiceResultText.Text = "\"" + text + "\"";
+            VoiceResultText.FontStyle = FontStyles.Normal;
+            VoiceResultText.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF3, 0xE8, 0xFF));
+            VoiceResultText.Visibility = Visibility.Visible;
+
+            var textFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(150));
+            VoiceResultText.BeginAnimation(OpacityProperty, textFadeIn);
+
+            // Execute offline command if parser and executor are available
+            if (_commandParser != null && _commandExecutor != null)
+            {
+                var intent = _commandParser.Parse(text);
+                if (intent.Type != CommandType.Unknown && intent.Confidence >= 0.60f)
+                {
+                    _voiceResultTimer?.Stop();
+                    _ = Task.Run(async () =>
+                    {
+                        var result = await _commandExecutor.ExecuteAsync(intent);
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            if (!_isVoiceModeActive) return;
+
+                            OrbitLogger.Info(LogCategory, $"Command executed: success={result.Success}, message='{result.Message}'");
+                            VoiceResultText.Text = result.Message;
+                            VoiceResultText.Foreground = result.Success
+                                ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4A, 0xDE, 0x80))
+                                : new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xF8, 0x71, 0x71));
+
+                            // Display execution feedback comfortably for 3.5 seconds
+                            _voiceResultTimer?.Stop();
+                            _voiceResultTimer = new DispatcherTimer
+                            {
+                                Interval = TimeSpan.FromMilliseconds(3500)
+                            };
+                            _voiceResultTimer.Tick += (s, e) =>
+                            {
+                                _voiceResultTimer.Stop();
+                                if (_isVoiceModeActive)
+                                {
+                                    ExitVoiceMode(cancelCapture: false, returnToMascot: true);
+                                }
+                            };
+                            _voiceResultTimer.Start();
+                        });
+                    });
+                    return;
+                }
+            }
+
+            // Display recognized text comfortably for 3.5 seconds before smoothly returning to mascot
+            _voiceResultTimer?.Stop();
+            _voiceResultTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(3500)
+            };
+            _voiceResultTimer.Tick += (s, e) =>
+            {
+                _voiceResultTimer.Stop();
+                if (_isVoiceModeActive)
+                {
+                    ExitVoiceMode(cancelCapture: false, returnToMascot: true);
+                }
+            };
+            _voiceResultTimer.Start();
+        });
     }
 
     #endregion
