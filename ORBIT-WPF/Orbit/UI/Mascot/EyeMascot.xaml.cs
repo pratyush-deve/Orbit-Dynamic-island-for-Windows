@@ -46,6 +46,17 @@ public partial class EyeMascot : UserControl
     public event Action<Orbit.Models.AgentState>? VisualStateChanged;
 
     /// <summary>
+    /// Raised when the user clicks directly on the mascot's left eye.
+    /// Dedicated trigger for opening the Quick Actions hover tray without triggering general expansion.
+    /// </summary>
+    public event MouseButtonEventHandler? LeftEyeMouseDown;
+
+    private void OnLeftEyeMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        LeftEyeMouseDown?.Invoke(this, e);
+    }
+
+    /// <summary>
     /// Gets whether the mascot is currently holding the Completed (DONE) green visual state.
     /// </summary>
     public bool IsHoldingDoneState => _isHoldingDoneState;

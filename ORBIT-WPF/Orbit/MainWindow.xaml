@@ -606,7 +606,7 @@
                                   HorizontalAlignment="Center"
                                   VerticalAlignment="Top"
                                   Margin="0,1,0,0"
-                                  IsHitTestVisible="False">
+                                  IsHitTestVisible="True">
                     <mascot:EyeMascot.LayoutTransform>
                         <ScaleTransform ScaleX="0.68" ScaleY="0.68"/>
                     </mascot:EyeMascot.LayoutTransform>

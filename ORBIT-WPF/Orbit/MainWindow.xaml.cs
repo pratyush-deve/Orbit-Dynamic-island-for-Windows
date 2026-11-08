@@ -237,6 +237,9 @@ public partial class MainWindow : Window
         _lifecycleService.ResetPositionRequested += OnResetPositionRequested;
         _lifecycleService.ExitRequested += OnExitRequested;
 
+        // Wire dedicated Left Eye click for Quick Actions tray activation
+        PillMascot.LeftEyeMouseDown += OnPillMascotLeftEyeMouseDown;
+
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Deactivated += OnWindowDeactivated;
@@ -734,15 +737,6 @@ public partial class MainWindow : Window
         {
             var pos = e.GetPosition(PillMascot);
             PillMascot.TrackCursor(pos);
-
-            // Ensure hover detection starts when mouse is over mascot while collapsed AND in Idle state only
-            if (_currentAgentState == Orbit.Models.AgentState.Idle &&
-                !PillMascot.IsHoldingDoneState &&
-                _lifecycleService.CurrentState == CompanionState.Collapsed &&
-                !_isHovering && !_isHoverExpanding && !_isHoverCollapsing && !_isTransitioningToFullExpand)
-            {
-                StartHoverTimer();
-            }
         }
     }
 
@@ -802,6 +796,36 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnPillMascotLeftEyeMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        // Always mark handled so clicking the left eye never bubbles into general mascot expansion
+        e.Handled = true;
+
+        // Tray activation only permitted in idle collapsed mascot form
+        if (_lifecycleService.CurrentState != CompanionState.Collapsed)
+        {
+            return;
+        }
+
+        if (_currentAgentState != Orbit.Models.AgentState.Idle || PillMascot.IsHoldingDoneState)
+        {
+            return;
+        }
+
+        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isVoiceModeActive || _isFileDockOpen)
+        {
+            return;
+        }
+
+        OrbitLogger.Info(LogCategory, "Left eye clicked in collapsed idle state. Expanding Quick Actions tray.");
+        ExecuteHoverExpansion();
+    }
+
     private void OnMascotClick(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
@@ -857,10 +881,7 @@ public partial class MainWindow : Window
 
     private void OnMascotMouseEnter(object sender, MouseEventArgs e)
     {
-        if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
-        {
-            StartHoverTimer();
-        }
+        // Hover-based activation removed; Quick Actions tray expansion is now triggered specifically by clicking the left eye.
     }
 
     private void OnMascotMouseLeave(object sender, MouseEventArgs e)
@@ -907,7 +928,7 @@ public partial class MainWindow : Window
     private void ExecuteHoverExpansion()
     {
         _isHoverExpanding = true;
-        OrbitLogger.Info(LogCategory, $"Continuous {HoverActivationSeconds}-second hover detected. Expanding Quick Actions horizontally.");
+        OrbitLogger.Info(LogCategory, "Expanding Quick Actions tray horizontally.");
 
         // Guard: ensure StandardQuickActionsPanel is visible and VoiceModePanel is collapsed
         VoiceModePanel.BeginAnimation(OpacityProperty, null);

@@ -19,8 +19,12 @@
         <!-- Left & Right Eyes -->
         <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
             
-            <!-- Left Eye Container -->
-            <Grid Width="20" Height="26" Margin="0,0,8,0">
+            <!-- Left Eye Container (Dedicated shortcut to open hover tray on click) -->
+            <Grid x:Name="LeftEyeContainer"
+                  Width="20" Height="26" Margin="0,0,8,0"
+                  Background="Transparent"
+                  Cursor="Hand"
+                  MouseLeftButtonDown="OnLeftEyeMouseDown">
                 <!-- Group Transform: Gaze Translation & Blinking Scale -->
                 <Grid.RenderTransform>
                     <TransformGroup>

@@ -228,5 +228,121 @@ public class HoverQuickActionsTests
             Assert.False(timer.IsEnabled);
         });
     }
+
+    [Fact]
+    public void EyeMascot_LeftEyeContainer_HasClickHitboxAndEvent()
+    {
+        RunOnSta(() =>
+        {
+            var mascot = new EyeMascot();
+            Assert.NotNull(mascot);
+
+            var leftContainer = mascot.FindName("LeftEyeContainer") as Grid;
+            Assert.NotNull(leftContainer);
+            Assert.NotNull(leftContainer.Background); // Background must not be null for hit-testing
+            Assert.Equal(System.Windows.Input.Cursors.Hand, leftContainer.Cursor);
+
+            bool eventFired = false;
+            mascot.LeftEyeMouseDown += (s, e) => { eventFired = true; };
+
+            var onLeftEyeMouseDown = typeof(EyeMascot).GetMethod("OnLeftEyeMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(onLeftEyeMouseDown);
+
+            var mouseDevice = System.Windows.Input.Mouse.PrimaryDevice;
+            var eventArgs = new System.Windows.Input.MouseButtonEventArgs(mouseDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+
+            onLeftEyeMouseDown.Invoke(mascot, new object[] { leftContainer, eventArgs });
+            Assert.True(eventFired);
+        });
+    }
+
+    [Fact]
+    public void LeftEyeClick_OpensHoverTray_OnlyInIdleCollapsedState_AndMarksHandled()
+    {
+        RunOnSta(() =>
+        {
+            var app = new OrbitApplication();
+            var window = app.GetService<MainWindow>();
+            Assert.NotNull(window);
+
+            var handler = typeof(MainWindow).GetMethod("OnPillMascotLeftEyeMouseDown", BindingFlags.NonPublic | BindingFlags.Instance);
+            var isExpandingField = typeof(MainWindow).GetField("_isHoverExpanding", BindingFlags.NonPublic | BindingFlags.Instance);
+            var stateField = typeof(MainWindow).GetField("_currentAgentState", BindingFlags.NonPublic | BindingFlags.Instance);
+            var lifecycleService = app.GetService<Orbit.Services.IWindowLifecycleService>();
+
+            Assert.NotNull(handler);
+            Assert.NotNull(isExpandingField);
+            Assert.NotNull(stateField);
+            Assert.NotNull(lifecycleService);
+
+            // 1. In Idle Collapsed state -> Click left eye should mark handled and trigger expansion
+            stateField.SetValue(window, Orbit.Models.AgentState.Idle);
+            lifecycleService.RequestCollapse(); // Ensure collapsed
+
+            var mouseDevice = System.Windows.Input.Mouse.PrimaryDevice;
+            var eventArgs = new System.Windows.Input.MouseButtonEventArgs(mouseDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+
+            handler.Invoke(window, new object[] { window.PillMascot, eventArgs });
+            Assert.True(eventArgs.Handled, "Left eye click must mark e.Handled = true so it never bubbles to normal expansion");
+            Assert.True((bool)isExpandingField.GetValue(window)!, "Left eye click must trigger hover expansion in idle collapsed state");
+
+            // Reset expanding flag
+            isExpandingField.SetValue(window, false);
+
+            // 2. In Working state -> Click left eye must NOT trigger expansion
+            stateField.SetValue(window, Orbit.Models.AgentState.Working);
+            var workingArgs = new System.Windows.Input.MouseButtonEventArgs(mouseDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+            handler.Invoke(window, new object[] { window.PillMascot, workingArgs });
+            Assert.True(workingArgs.Handled, "Must still mark handled to prevent bubbling");
+            Assert.False((bool)isExpandingField.GetValue(window)!, "Left eye click must NOT expand tray during Working state");
+
+            // 3. In Expanded state -> Click left eye must NOT trigger hover tray
+            stateField.SetValue(window, Orbit.Models.AgentState.Idle);
+            lifecycleService.RequestExpand(); // Change to expanded
+            var expandedArgs = new System.Windows.Input.MouseButtonEventArgs(mouseDevice, 0, System.Windows.Input.MouseButton.Left)
+            {
+                RoutedEvent = UIElement.MouseLeftButtonDownEvent
+            };
+            handler.Invoke(window, new object[] { window.PillMascot, expandedArgs });
+            Assert.False((bool)isExpandingField.GetValue(window)!, "Left eye click must NOT trigger hover tray when fully expanded");
+        });
+    }
+
+    [Fact]
+    public void MascotMouseEnter_DoesNotStartHoverTimer()
+    {
+        RunOnSta(() =>
+        {
+            var app = new OrbitApplication();
+            var window = app.GetService<MainWindow>();
+            Assert.NotNull(window);
+
+            var timerField = typeof(MainWindow).GetField("_hoverTimer", BindingFlags.NonPublic | BindingFlags.Instance);
+            var mouseEnterMethod = typeof(MainWindow).GetMethod("OnMascotMouseEnter", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            Assert.NotNull(timerField);
+            Assert.NotNull(mouseEnterMethod);
+
+            var timer = timerField.GetValue(window) as System.Windows.Threading.DispatcherTimer;
+            Assert.NotNull(timer);
+
+            // Trigger mouse enter
+            var mouseDevice = System.Windows.Input.Mouse.PrimaryDevice;
+            var args = new System.Windows.Input.MouseEventArgs(mouseDevice, 0);
+            mouseEnterMethod.Invoke(window, new object[] { window.MascotContainerGrid, args });
+
+            // Hover timer must remain NOT started
+            Assert.False(timer.IsEnabled, "Hovering over mascot must not start the hover timer");
+        });
+    }
 }
 
