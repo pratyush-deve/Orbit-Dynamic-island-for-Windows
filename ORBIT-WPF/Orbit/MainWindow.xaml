@@ -380,15 +380,16 @@
                     <!-- Subtle Separator -->
                     <Rectangle Width="1" Height="14" Fill="#30A855F7" VerticalAlignment="Center" Margin="5,0,5,0"/>
 
-                    <!-- 3. Annotation (Pencil Icon placeholder) -->
+                    <!-- 3. Annotation (Pencil Icon) -->
                     <Button x:Name="BtnQuickAnnotation"
                             Width="36" Height="26"
                             Background="Transparent"
                             BorderThickness="0"
                             Padding="0"
-                            Cursor="Arrow"
+                            Cursor="Hand"
                             ToolTip="Annotation"
-                            Focusable="False">
+                            Focusable="False"
+                            Click="OnQuickAnnotationClicked">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bg"
@@ -573,6 +574,700 @@
                         </TextBlock.Effect>
                     </TextBlock>
                 </Grid>
+
+                <!-- In-Place Desktop Annotation Toolbar Panel (Centered horizontally inside notch) -->
+                <StackPanel x:Name="AnnotationToolbarPanel"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,8"
+                            Visibility="Collapsed"
+                            Opacity="0.0"
+                            IsHitTestVisible="False">
+
+                    <!-- 1. Back Button -->
+                    <Button x:Name="BtnAnnotateBack"
+                            Width="28" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Exit Annotation"
+                            Focusable="False"
+                            Click="OnAnnotateBackClicked">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch">
+                                    <Path Data="M 13,6 L 7,12 L 13,18 M 8,12 L 19,12"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="1.8"
+                                          StrokeLineJoin="Round"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Width="13" Height="13"
+                                          Stretch="Uniform"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#20FFFFFF"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- Subtle Neutral Separator -->
+                    <Rectangle Width="1" Height="14" Fill="#25FFFFFF" VerticalAlignment="Center" Margin="4,0,4,0"/>
+
+                    <!-- 2. Cursor / Select Tool (Mode Button) -->
+                    <Button x:Name="BtnAnnotateCursor"
+                            Width="30" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Cursor / Select"
+                            Focusable="False"
+                            Margin="2,0,2,0"
+                            Click="OnAnnotateCursorClicked"
+                            MouseEnter="OnAnnotateToolButtonMouseEnter"
+                            MouseLeave="OnAnnotateToolButtonMouseLeave">
+                        <Border x:Name="BorderAnnotateCursorBg"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+                            <Path x:Name="IconAnnotateCursor"
+                                  Data="M 4,2 L 4,17.5 L 8.5,13.5 L 13.5,19.5 L 15.5,18 L 10.5,12 L 16.5,12 Z"
+                                  Fill="#38BDF8"
+                                  Stroke="#38BDF8"
+                                  StrokeThickness="1.4"
+                                  StrokeLineJoin="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Width="13" Height="15"
+                                  Stretch="Uniform">
+                                <Path.Effect>
+                                    <DropShadowEffect x:Name="GlowAnnotateCursor" Color="#38BDF8" BlurRadius="10" ShadowDepth="0" Opacity="0.95"/>
+                                </Path.Effect>
+                            </Path>
+                        </Border>
+                    </Button>
+
+                    <!-- 3. Pen Tool (Mode Button) -->
+                    <Button x:Name="BtnAnnotatePen"
+                            Width="30" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Pen"
+                            Focusable="False"
+                            Margin="2,0,2,0"
+                            Click="OnAnnotatePenClicked"
+                            MouseEnter="OnAnnotateToolButtonMouseEnter"
+                            MouseLeave="OnAnnotateToolButtonMouseLeave">
+                        <Border x:Name="BorderAnnotatePenBg"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+                            <Path x:Name="IconAnnotatePen"
+                                  Data="M 17.5,2.5 C 18.1,1.9 19.1,1.9 19.7,2.5 L 21.5,4.3 C 22.1,4.9 22.1,5.9 21.5,6.5 L 8.5,19.5 L 3,21 L 4.5,15.5 Z M 15,5 L 19,9 M 5,16 L 8,19"
+                                  Fill="#EF4444"
+                                  Stroke="#FFFFFF"
+                                  StrokeThickness="1.4"
+                                  StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Width="14" Height="14"
+                                  Stretch="Uniform"/>
+                        </Border>
+                    </Button>
+
+                    <!-- 4. Eraser Tool (Mode Button) -->
+                    <Button x:Name="BtnAnnotateEraser"
+                            Width="30" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Eraser"
+                            Focusable="False"
+                            Margin="2,0,2,0"
+                            Click="OnAnnotateEraserClicked"
+                            MouseEnter="OnAnnotateToolButtonMouseEnter"
+                            MouseLeave="OnAnnotateToolButtonMouseLeave">
+                        <Border x:Name="BorderAnnotateEraserBg"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="6"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform ScaleX="1.0" ScaleY="1.0"/>
+                            </Border.RenderTransform>
+                            <Path x:Name="IconAnnotateEraser"
+                                  Data="M 7,18 L 2.5,13.5 C 1.8,12.8 1.8,11.7 2.5,11 L 11.5,2 C 12.2,1.3 13.3,1.3 14,2 L 21.5,9.5 C 22.2,10.2 22.2,11.3 21.5,12 L 13.5,20 L 7,20 Z M 6,13 L 14.5,4.5"
+                                  Fill="Transparent"
+                                  Stroke="#FFFFFF"
+                                  StrokeThickness="1.4"
+                                  StrokeLineJoin="Round"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Width="14" Height="14"
+                                  Stretch="Uniform"/>
+                        </Border>
+                    </Button>
+
+                    <!-- 5. Trash / Clear All Button - Pink/Red Identity -->
+                    <Button x:Name="BtnAnnotateClear"
+                            Width="30" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Clear All"
+                            Focusable="False"
+                            Margin="2,0,2,0"
+                            Click="OnAnnotateClearClicked">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch">
+                                    <Path Data="M 9,3 L 15,3 C 15.6,3 16,3.4 16,4 L 19,4 C 19.6,4 20,4.4 20,5 C 20,5.6 19.6,6 19,6 L 18,6 L 17.2,19.5 C 17.1,20.9 15.9,22 14.5,22 L 9.5,22 C 8.1,22 6.9,20.9 6.8,19.5 L 6,6 L 5,6 C 4.4,6 4,5.6 4,5 C 4,4.4 4.4,4 5,4 L 8,4 C 8,3.4 8.4,3 9,3 Z M 9,9 C 8.4,9 8,9.4 8,10 L 8,17 C 8,17.6 8.4,18 9,18 C 9.6,18 10,17.6 10,17 L 10,10 C 10,9.4 9.6,9 9,9 Z M 15,9 C 14.4,9 14,9.4 14,10 L 14,17 C 14,17.6 14.4,18 15,18 C 15.6,18 16,17.6 16,17 L 16,10 C 16,9.4 15.6,9 15,9 Z"
+                                          Fill="#FB7185"
+                                          Stroke="#F43F5E"
+                                          StrokeThickness="0.4"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Width="14" Height="15"
+                                          Stretch="Uniform"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#25F43F5E"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- 6. Save Screenshot Button - Green Identity -->
+                    <Button x:Name="BtnAnnotateSave"
+                            Width="30" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Save Screenshot"
+                            Focusable="False"
+                            Margin="2,0,2,0"
+                            Click="OnAnnotateSaveClicked">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch">
+                                    <Path Data="M 5,3 C 3.9,3 3,3.9 3,5 L 3,19 C 3,20.1 3.9,21 5,21 L 19,21 C 20.1,21 21,20.1 21,19 L 21,7.5 L 16.5,3 L 5,3 Z M 6,5 L 15,5 L 15,8 L 6,8 L 6,5 Z M 6,13 L 18,13 L 18,19 L 6,19 L 6,13 Z"
+                                          Fill="#4ADE80"
+                                          Stroke="#22C55E"
+                                          StrokeThickness="0.4"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Width="14" Height="14"
+                                          Stretch="Uniform"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#2522C55E"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                    <!-- Subtle Neutral Separator -->
+                    <Rectangle Width="1" Height="14" Fill="#25FFFFFF" VerticalAlignment="Center" Margin="4,0,4,0"/>
+
+                    <!-- 7. Color Swatch Selector (Replaces "Annotate" text) -->
+                    <Button x:Name="BtnAnnotateColorPicker"
+                            Width="28" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Select Color"
+                            Focusable="False"
+                            Margin="1,0,2,0"
+                            Click="OnAnnotateColorPickerClicked"
+                            MouseEnter="OnAnnotateColorPickerMouseEnter"
+                            MouseLeave="OnAnnotateColorPickerMouseLeave">
+                        <Border x:Name="BorderColorPickerContainer"
+                                Background="Transparent"
+                                CornerRadius="6"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch">
+                            <Border x:Name="BorderCurrentColorSwatch"
+                                    Width="16" Height="16"
+                                    CornerRadius="8"
+                                    Background="#EF4444"
+                                    BorderBrush="#FFFFFFFF"
+                                    BorderThickness="1.5"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                                <Border.Effect>
+                                    <DropShadowEffect x:Name="GlowCurrentColorSwatch" Color="#EF4444" BlurRadius="8" ShadowDepth="0" Opacity="0.85"/>
+                                </Border.Effect>
+                            </Border>
+                        </Border>
+                    </Button>
+
+                    <!-- Subtle Neutral Separator -->
+                    <Rectangle Width="1" Height="14" Fill="#25FFFFFF" VerticalAlignment="Center" Margin="3,0,3,0"/>
+
+                    <!-- 8. Minimize / Tuck Away Toolbar Button -->
+                    <Button x:Name="BtnAnnotateTuck"
+                            Width="26" Height="26"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip="Tuck Toolbar (Esc to exit)"
+                            Focusable="False"
+                            Margin="1,0,2,0"
+                            Click="OnAnnotateTuckClicked">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="Bg"
+                                        Background="Transparent"
+                                        CornerRadius="6"
+                                        HorizontalAlignment="Stretch"
+                                        VerticalAlignment="Stretch">
+                                    <Path Data="M 6,14 L 12,8 L 18,14"
+                                          Stroke="#C084FC"
+                                          StrokeThickness="1.8"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Width="12" Height="12"
+                                          Stretch="Uniform"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Bg" Property="Background" Value="#25A855F7"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
+                </StackPanel>
+
+                <!-- Tucked Annotation Bar (Small notch pill when toolbar is tucked away) -->
+                <Button x:Name="BtnTuckedAnnotationRestore"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="0"
+                        Cursor="Hand"
+                        Focusable="False"
+                        ToolTip="Click to restore Annotation Toolbar"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,8"
+                        Visibility="Collapsed"
+                        Opacity="0.0"
+                        IsHitTestVisible="False"
+                        Click="OnTuckedAnnotationRestoreClicked"
+                        MouseEnter="OnTuckedAnnotationRestoreMouseEnter">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="8" Height="8" CornerRadius="4" Background="#A855F7">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#A855F7" BlurRadius="6" ShadowDepth="0" Opacity="0.9" />
+                            </Border.Effect>
+                        </Border>
+                        <Path Data="M 6,9 L 12,15 L 18,9"
+                              Stroke="#C084FC"
+                              StrokeThickness="1.8"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              Margin="6,0,0,0"
+                              Width="10" Height="10"
+                              Stretch="Uniform"/>
+                    </StackPanel>
+                </Button>
+
+                <!-- Annotation Screenshot Toast Feedback -->
+                <Border x:Name="AnnotationToastBorder"
+                        Background="#201538"
+                        BorderBrush="#4ADE80"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="10,4"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="0,0,0,8"
+                        Visibility="Collapsed"
+                        Opacity="0.0"
+                        IsHitTestVisible="False">
+                    <Border.Effect>
+                        <DropShadowEffect Color="#4ADE80" BlurRadius="10" ShadowDepth="0" Opacity="0.5" />
+                    </Border.Effect>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Data="M 5,12 L 9,16 L 19,6"
+                              Stroke="#4ADE80"
+                              StrokeThickness="2"
+                              StrokeStartLineCap="Round"
+                              StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round"
+                              Width="11" Height="11"
+                              Margin="0,0,6,0"
+                              Stretch="Uniform" />
+                        <TextBlock x:Name="TxtAnnotationToast"
+                                   Text="Screenshot saved &amp; copied!"
+                                   Foreground="#4ADE80"
+                                   FontSize="11.5"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Color Palette Popup for Annotation Mode (Positioned directly below Dynamic Island) -->
+                <Popup x:Name="AnnotationColorPalettePopup"
+                       PlacementTarget="{Binding ElementName=QuickActionsBar}"
+                       Placement="Custom"
+                       AllowsTransparency="True"
+                       StaysOpen="False"
+                       PopupAnimation="Fade">
+                    <Border x:Name="AnnotationColorPaletteBorder"
+                            Background="#181126"
+                            BorderBrush="#35FFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="14"
+                            Padding="8,5"
+                            SnapsToDevicePixels="True">
+                        <Border.Effect>
+                            <DropShadowEffect Color="#000000" BlurRadius="16" ShadowDepth="3" Opacity="0.6"/>
+                        </Border.Effect>
+                        <StackPanel x:Name="AnnotationPaletteStackPanel"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <!-- 1. Red (#EF4444) - Default -->
+                            <Button x:Name="BtnPaletteColor_Red"
+                                    Tag="#EF4444"
+                                    ToolTip="Red"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#EF4444"/>
+                                    <Path x:Name="Check_Red"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Visible"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 2. Orange (#F97316) -->
+                            <Button x:Name="BtnPaletteColor_Orange"
+                                    Tag="#F97316"
+                                    ToolTip="Orange"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#F97316"/>
+                                    <Path x:Name="Check_Orange"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 3. Yellow (#EAB308) -->
+                            <Button x:Name="BtnPaletteColor_Yellow"
+                                    Tag="#EAB308"
+                                    ToolTip="Yellow"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#EAB308"/>
+                                    <Path x:Name="Check_Yellow"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#0F172A"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 4. Green (#22C55E) -->
+                            <Button x:Name="BtnPaletteColor_Green"
+                                    Tag="#22C55E"
+                                    ToolTip="Green"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#22C55E"/>
+                                    <Path x:Name="Check_Green"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 5. Cyan (#06B6D4) -->
+                            <Button x:Name="BtnPaletteColor_Cyan"
+                                    Tag="#06B6D4"
+                                    ToolTip="Cyan"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#06B6D4"/>
+                                    <Path x:Name="Check_Cyan"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 6. Blue (#3B82F6) -->
+                            <Button x:Name="BtnPaletteColor_Blue"
+                                    Tag="#3B82F6"
+                                    ToolTip="Blue"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#3B82F6"/>
+                                    <Path x:Name="Check_Blue"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 7. Purple (#A855F7) -->
+                            <Button x:Name="BtnPaletteColor_Purple"
+                                    Tag="#A855F7"
+                                    ToolTip="Purple"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#A855F7"/>
+                                    <Path x:Name="Check_Purple"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 8. Pink (#EC4899) -->
+                            <Button x:Name="BtnPaletteColor_Pink"
+                                    Tag="#EC4899"
+                                    ToolTip="Pink"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#EC4899"/>
+                                    <Path x:Name="Check_Pink"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 9. White (#FFFFFF) -->
+                            <Button x:Name="BtnPaletteColor_White"
+                                    Tag="#FFFFFF"
+                                    ToolTip="White"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#FFFFFF" Stroke="#30FFFFFF" StrokeThickness="1"/>
+                                    <Path x:Name="Check_White"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#0F172A"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+
+                            <!-- 10. Black (#0F172A) -->
+                            <Button x:Name="BtnPaletteColor_Black"
+                                    Tag="#0F172A"
+                                    ToolTip="Black"
+                                    Width="22" Height="22"
+                                    Margin="3,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="0"
+                                    Cursor="Hand"
+                                    Focusable="False"
+                                    PreviewMouseLeftButtonDown="OnPaletteColorPreviewMouseDown"
+                                    Click="OnPaletteColorClicked">
+                                <Grid Width="22" Height="22">
+                                    <Ellipse Fill="#0F172A" Stroke="#475569" StrokeThickness="1"/>
+                                    <Path x:Name="Check_Black"
+                                          Data="M 6.5,11 L 9.5,14 L 15.5,8"
+                                          Stroke="#FFFFFF"
+                                          StrokeThickness="2"
+                                          StrokeStartLineCap="Round"
+                                          StrokeEndLineCap="Round"
+                                          StrokeLineJoin="Round"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Visibility="Collapsed"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Popup>
             </Grid>
 
             <!-- 4.5 Staged File Dock Panel (Expands vertically below QuickActionsBar) -->

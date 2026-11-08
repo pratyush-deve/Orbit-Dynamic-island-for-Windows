@@ -1,3 +1,5 @@
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -24,8 +26,16 @@ using DataObject = System.Windows.DataObject;
 using DataFormats = System.Windows.DataFormats;
 using Border = System.Windows.Controls.Border;
 using Brushes = System.Windows.Media.Brushes;
+using MediaColor = System.Windows.Media.Color;
 
 namespace Orbit;
+
+public enum AnnotationToolMode
+{
+    Cursor,
+    Pen,
+    Eraser
+}
 
 /// <summary>
 /// Main floating companion window for ORBIT 2.0.
@@ -41,6 +51,8 @@ public partial class MainWindow : Window
     public const double CollapsedHeight = 38.0;
     public const double QuickActionsWidth = 310.0;
     public const double QuickActionsHeight = 44.0;
+    public const double AnnotationToolbarWidth = 420.0;
+    public const double TuckedToolbarWidth = 72.0;
     public const double FileDockTotalHeight = 150.0;
     public const double HoverActivationSeconds = 2.0;
     public const double CollapseDelayMilliseconds = 450.0;
@@ -78,8 +90,18 @@ public partial class MainWindow : Window
     private bool _isFileDockOpen = false;
     private bool _isFileDockTransitioning = false;
     private bool _isVoiceModeActive = false;
+    private bool _isAnnotationModeActive = false;
+    private AnnotationToolMode _currentAnnotationTool = AnnotationToolMode.Cursor;
+    private string _currentAnnotationColorHex = "#EF4444";
+    private MediaColor _currentAnnotationColor = MediaColor.FromRgb(0xEF, 0x44, 0x44);
+    private Orbit.UI.DesktopAnnotationOverlayWindow? _annotationOverlayWindow;
     public bool IsFileDockOpen => _isFileDockOpen;
     public bool IsVoiceModeActive => _isVoiceModeActive;
+    public bool IsAnnotationModeActive => _isAnnotationModeActive;
+    public AnnotationToolMode CurrentAnnotationTool => _currentAnnotationTool;
+    public string CurrentAnnotationColorHex => _currentAnnotationColorHex;
+    public MediaColor CurrentAnnotationColor => _currentAnnotationColor;
+    public Orbit.UI.DesktopAnnotationOverlayWindow? AnnotationOverlayWindow => _annotationOverlayWindow;
     public IFileDockService FileDockService => _fileDockService;
     public IVoiceSessionManager VoiceSessionManager => _voiceSessionManager;
 
@@ -239,6 +261,25 @@ public partial class MainWindow : Window
 
         // Wire dedicated Left Eye click for Quick Actions tray activation
         PillMascot.LeftEyeMouseDown += OnPillMascotLeftEyeMouseDown;
+
+        // CustomPopupPlacementCallback to precisely center the Color Palette Popup directly below the Dynamic Island
+        AnnotationColorPalettePopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
+        {
+            double x = Math.Round((targetSize.Width - popupSize.Width) / 2.0);
+            double y = Math.Round(targetSize.Height + 6.0);
+            return new[] { new System.Windows.Controls.Primitives.CustomPopupPlacement(new Point(x, y), System.Windows.Controls.Primitives.PopupPrimaryAxis.Horizontal) };
+        };
+
+        AnnotationColorPalettePopup.Opened += (s, e) =>
+        {
+            if (AnnotationColorPalettePopup.Child is UIElement child &&
+                PresentationSource.FromVisual(child) is HwndSource source &&
+                source.Handle != IntPtr.Zero)
+            {
+                NativeMethods.SetWindowPos(source.Handle, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            }
+        };
 
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
@@ -446,8 +487,8 @@ public partial class MainWindow : Window
             }
         }
 
-        // CRITICAL: Do NOT collapse or exit if Voice Mode is actively listening!
-        if (_isVoiceModeActive)
+        // CRITICAL: Do NOT collapse or exit if Voice Mode or Annotation Mode is actively open!
+        if (_isVoiceModeActive || _isAnnotationModeActive)
         {
             _overlayService.ReapplyTopmost(_hwnd);
             return;
@@ -476,6 +517,9 @@ public partial class MainWindow : Window
         }
     }
 
+    private bool _isConfirmHideDialogOpen = false;
+    private bool _isAnnotationToolbarTucked = false;
+    public bool IsAnnotationToolbarTucked => _isAnnotationToolbarTucked;
     private DateTime _lastToggleRequestTime = DateTime.MinValue;
 
     /// <summary>
@@ -503,6 +547,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 1b. Safeguard: If hide confirmation dialog is already open, ignore repeated HP key presses!
+        if (_isConfirmHideDialogOpen)
+        {
+            OrbitLogger.Debug(LogCategory, "Ignored toggle request because hide confirmation dialog is already open.");
+            return;
+        }
+
+        // 1c. If annotation mode is active and mascot is visible on screen:
+        // Do NOT immediately hide ORBIT. Show confirmation dialog asking whether user wants to clear annotations and hide ORBIT.
+        if (_isAnnotationModeActive && IsVisible && Visibility == Visibility.Visible && _lifecycleService.CurrentState != CompanionState.Hidden)
+        {
+            ShowAnnotationHideConfirmation();
+            return;
+        }
+
         // 2. If the mascot is currently hidden (via Hide button, tray, or window state), bring it to focus on screen
         if (_lifecycleService.CurrentState == CompanionState.Hidden || !IsVisible || Visibility != Visibility.Visible)
         {
@@ -514,6 +573,11 @@ public partial class MainWindow : Window
             if (_isVoiceModeActive)
             {
                 ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+            }
+
+            if (_isAnnotationModeActive)
+            {
+                ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: true);
             }
 
             if (_isFileDockOpen)
@@ -580,6 +644,10 @@ public partial class MainWindow : Window
         {
             ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
         }
+        if (_isAnnotationModeActive)
+        {
+            ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: true);
+        }
         _lifecycleService.Hide();
     }
 
@@ -604,6 +672,11 @@ public partial class MainWindow : Window
                     if (_isVoiceModeActive)
                     {
                         ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+                    }
+
+                    if (_isAnnotationModeActive)
+                    {
+                        ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: true);
                     }
 
                     if (_isFileDockOpen)
@@ -658,6 +731,11 @@ public partial class MainWindow : Window
                     if (_isVoiceModeActive)
                     {
                         ExitVoiceMode(cancelCapture: true, returnToMascot: true, immediate: true);
+                    }
+
+                    if (_isAnnotationModeActive)
+                    {
+                        ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: true);
                     }
 
                     if (_isFileDockOpen)
@@ -817,7 +895,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isVoiceModeActive || _isFileDockOpen)
+        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isVoiceModeActive || _isAnnotationModeActive || _isFileDockOpen)
         {
             return;
         }
@@ -1013,8 +1091,8 @@ public partial class MainWindow : Window
     {
         if (!_isQuickActionsOpen || _isTransitioningToFullExpand || _isHoverCollapsing) return;
 
-        // CRITICAL: While Voice Mode is active, do not collapse when cursor leaves
-        if (_isVoiceModeActive)
+        // CRITICAL: While Voice Mode or Annotation Mode is active, do not collapse when cursor leaves
+        if (_isVoiceModeActive || _isAnnotationModeActive)
         {
             return;
         }
@@ -1115,8 +1193,8 @@ public partial class MainWindow : Window
         CancelCollapseDelay();
         if (_isTransitioningToFullExpand || _isHoverCollapsing || !_isQuickActionsOpen) return;
 
-        // CRITICAL: While Voice Mode is active, do not collapse
-        if (_isVoiceModeActive) return;
+        // CRITICAL: While Voice Mode or Annotation Mode is active, do not collapse
+        if (_isVoiceModeActive || _isAnnotationModeActive) return;
 
         if (_isFileDockOpen)
         {
@@ -2058,6 +2136,996 @@ public partial class MainWindow : Window
 
     #endregion
 
+    #region Desktop Annotation Toolbar Mode
+
+    private void OnQuickAnnotationClicked(object sender, RoutedEventArgs e)
+    {
+        if (_isAnnotationModeActive || _isVoiceModeActive || _isFileDockTransitioning || _isHoverCollapsing || _isTransitioningToFullExpand)
+        {
+            return;
+        }
+
+        OrbitLogger.Info(LogCategory, "Quick Actions annotation button clicked. Activating Annotation Toolbar mode.");
+        EnterAnnotationToolbarMode();
+    }
+
+    /// <summary>
+    /// Enters In-Place Desktop Annotation Toolbar Mode inside the horizontally expanded dynamic island.
+    /// Fades out standard quick actions and expands width to 385 DIP while keeping height at 44 DIP.
+    /// </summary>
+    public void EnterAnnotationToolbarMode()
+    {
+        if (_isAnnotationModeActive || _isHoverCollapsing || _isTransitioningToFullExpand) return;
+
+        // If File Dock is open, close it cleanly first
+        if (_isFileDockOpen)
+        {
+            CloseFileDock(toQuickActions: true);
+        }
+
+        _isAnnotationModeActive = true;
+        _isAnnotationToolbarTucked = false;
+        if (BtnTuckedAnnotationRestore != null)
+        {
+            BtnTuckedAnnotationRestore.Visibility = Visibility.Collapsed;
+            BtnTuckedAnnotationRestore.Opacity = 0.0;
+            BtnTuckedAnnotationRestore.IsHitTestVisible = false;
+        }
+        InstallAnnotationKeyboardHook();
+        CancelCollapseDelay();
+        CancelHoverTimer();
+
+        // 1. Reset tool selection to Cursor by default
+        SelectAnnotationTool(AnnotationToolMode.Cursor);
+
+        // 1b. Launch fullscreen desktop annotation overlay window
+        try
+        {
+            if (_annotationOverlayWindow == null)
+            {
+                _annotationOverlayWindow = new Orbit.UI.DesktopAnnotationOverlayWindow(_hwnd);
+                _annotationOverlayWindow.IsOverToolbarOrPaletteFunc = IsPointOverOrbitUI;
+                _annotationOverlayWindow.RequestCursorModeAction = () =>
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        if (_isAnnotationModeActive && _currentAnnotationTool != AnnotationToolMode.Cursor)
+                        {
+                            OrbitLogger.Info(LogCategory, "Right-click auto-switching to Cursor mode.");
+                            SelectAnnotationTool(AnnotationToolMode.Cursor);
+                        }
+                    });
+                };
+                _annotationOverlayWindow.Show();
+                _annotationOverlayWindow.SetTool(_currentAnnotationTool);
+                _annotationOverlayWindow.SetPenColor(_currentAnnotationColor);
+
+                _overlayService.ReapplyTopmost(_hwnd);
+                if (_annotationOverlayWindow.Hwnd != IntPtr.Zero)
+                {
+                    NativeMethods.SetWindowPos(_annotationOverlayWindow.Hwnd, _hwnd, 0, 0, 0, 0,
+                        NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Error(LogCategory, $"Failed to launch DesktopAnnotationOverlayWindow: {ex.Message}");
+        }
+
+        // 2. Hide mascot eyes
+        PillMascot.GracefullyCloseEyes(TimeSpan.FromMilliseconds(180));
+        if (MascotContainerGrid.Visibility == Visibility.Visible)
+        {
+            var mascotFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(140));
+            MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeOut);
+        }
+
+        // 3. Smoothly fade out standard quick action buttons
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+        fadeOut.Completed += (s, e) =>
+        {
+            StandardQuickActionsPanel.Visibility = Visibility.Collapsed;
+            StandardQuickActionsPanel.IsHitTestVisible = false;
+
+            // Reveal AnnotationToolbarPanel
+            AnnotationToolbarPanel.Visibility = Visibility.Visible;
+            AnnotationToolbarPanel.IsHitTestVisible = true;
+
+            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140));
+            AnnotationToolbarPanel.BeginAnimation(OpacityProperty, fadeIn);
+        };
+        StandardQuickActionsPanel.BeginAnimation(OpacityProperty, fadeOut);
+
+        // 4. Smoothly animate window dimensions horizontally to AnnotationToolbarWidth (385 DIP)
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, AnnotationToolbarWidth, TopMargin);
+
+        var duration = TimeSpan.FromMilliseconds(240);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        var widthAnim = new DoubleAnimation(AnnotationToolbarWidth, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+        var barWidthAnim = new DoubleAnimation(AnnotationToolbarWidth, duration) { EasingFunction = ease };
+
+        widthAnim.Completed += (s, e) =>
+        {
+            Width = AnnotationToolbarWidth;
+            Left = targetLeft;
+            QuickActionsBar.Width = AnnotationToolbarWidth;
+
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(LeftProperty, null);
+            QuickActionsBar.BeginAnimation(WidthProperty, null);
+
+            UpdateUnifiedIslandGeometry(AnnotationToolbarWidth, QuickActionsHeight);
+            _overlayService.ReapplyTopmost(_hwnd);
+            if (_annotationOverlayWindow != null && _annotationOverlayWindow.Hwnd != IntPtr.Zero)
+            {
+                NativeMethods.SetWindowPos(_annotationOverlayWindow.Hwnd, _hwnd, 0, 0, 0, 0,
+                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+            }
+            OrbitLogger.Info(LogCategory, "Annotation toolbar horizontally expanded successfully.");
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+        QuickActionsBar.BeginAnimation(WidthProperty, barWidthAnim);
+    }
+
+    /// <summary>
+    /// Exits Annotation Toolbar Mode and either restores the standard Quick Actions tray
+    /// or transitions directly back to the collapsed mascot pill.
+    /// </summary>
+    public void ExitAnnotationToolbarMode(bool returnToQuickActions = true, bool immediate = false)
+    {
+        if (!_isAnnotationModeActive) return;
+        _isAnnotationModeActive = false;
+        _isAnnotationToolbarTucked = false;
+
+        UninstallAnnotationKeyboardHook();
+
+        if (BtnTuckedAnnotationRestore != null)
+        {
+            BtnTuckedAnnotationRestore.Visibility = Visibility.Collapsed;
+            BtnTuckedAnnotationRestore.Opacity = 0.0;
+            BtnTuckedAnnotationRestore.IsHitTestVisible = false;
+        }
+
+        if (AnnotationToastBorder != null)
+        {
+            AnnotationToastBorder.Visibility = Visibility.Collapsed;
+            AnnotationToastBorder.Opacity = 0.0;
+        }
+
+        if (AnnotationColorPalettePopup != null)
+        {
+            AnnotationColorPalettePopup.IsOpen = false;
+        }
+
+        if (_annotationOverlayWindow != null)
+        {
+            try
+            {
+                _annotationOverlayWindow.ClearAllStrokes();
+                _annotationOverlayWindow.Close();
+            }
+            catch (Exception ex)
+            {
+                OrbitLogger.Warn(LogCategory, $"Failed to close annotation overlay: {ex.Message}");
+            }
+            _annotationOverlayWindow = null;
+        }
+
+        OrbitLogger.Info(LogCategory, $"Exiting annotation toolbar mode (returnToQuickActions={returnToQuickActions}, immediate={immediate}).");
+
+        if (immediate)
+        {
+            AnnotationToolbarPanel.BeginAnimation(OpacityProperty, null);
+            AnnotationToolbarPanel.Visibility = Visibility.Collapsed;
+            AnnotationToolbarPanel.Opacity = 0.0;
+            AnnotationToolbarPanel.IsHitTestVisible = false;
+
+            if (returnToQuickActions)
+            {
+                StandardQuickActionsPanel.BeginAnimation(OpacityProperty, null);
+                StandardQuickActionsPanel.Visibility = Visibility.Visible;
+                StandardQuickActionsPanel.Opacity = 1.0;
+                StandardQuickActionsPanel.IsHitTestVisible = true;
+
+                Width = QuickActionsWidth;
+                QuickActionsBar.Width = QuickActionsWidth;
+                var primary = _monitorService.GetPrimaryMonitor();
+                var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
+                Left = targetLeft;
+                UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
+            }
+            else
+            {
+                Width = CollapsedWidth;
+                Height = CollapsedHeight;
+                QuickActionsBar.Width = QuickActionsWidth;
+                QuickActionsBar.Visibility = Visibility.Collapsed;
+                QuickActionsBar.Opacity = 0.0;
+                QuickActionsBar.IsHitTestVisible = false;
+
+                PositionAtTopCenter(CollapsedWidth);
+                UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+                MascotContainerGrid.Visibility = Visibility.Visible;
+                MascotContainerGrid.Opacity = 1.0;
+                MascotContainerGrid.IsHitTestVisible = true;
+                PillMascot.RestoreNormalEyes(TimeSpan.Zero);
+            }
+            return;
+        }
+
+        if (returnToQuickActions)
+        {
+            // Cross-fade back to StandardQuickActionsPanel
+            var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+            fadeOut.Completed += (s, e) =>
+            {
+                AnnotationToolbarPanel.Visibility = Visibility.Collapsed;
+                AnnotationToolbarPanel.IsHitTestVisible = false;
+
+                StandardQuickActionsPanel.Visibility = Visibility.Visible;
+                StandardQuickActionsPanel.IsHitTestVisible = true;
+
+                var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140));
+                StandardQuickActionsPanel.BeginAnimation(OpacityProperty, fadeIn);
+            };
+            AnnotationToolbarPanel.BeginAnimation(OpacityProperty, fadeOut);
+
+            // Animate width from 385 back to QuickActionsWidth (310)
+            var primary = _monitorService.GetPrimaryMonitor();
+            var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
+
+            var duration = TimeSpan.FromMilliseconds(220);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+            var widthAnim = new DoubleAnimation(QuickActionsWidth, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+            var barWidthAnim = new DoubleAnimation(QuickActionsWidth, duration) { EasingFunction = ease };
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = QuickActionsWidth;
+                Left = targetLeft;
+                QuickActionsBar.Width = QuickActionsWidth;
+
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(LeftProperty, null);
+                QuickActionsBar.BeginAnimation(WidthProperty, null);
+
+                UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "Restored Standard Quick Actions bar from Annotation mode.");
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+            QuickActionsBar.BeginAnimation(WidthProperty, barWidthAnim);
+        }
+        else
+        {
+            // Transition directly back to compact mascot
+            _isHoverCollapsing = true;
+            _isQuickActionsOpen = false;
+
+            QuickActionsBar.IsHitTestVisible = false;
+            var actionsFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
+            QuickActionsBar.BeginAnimation(OpacityProperty, actionsFadeOut);
+
+            var primary = _monitorService.GetPrimaryMonitor();
+            var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+            var duration = TimeSpan.FromMilliseconds(220);
+            var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+            var widthAnim = new DoubleAnimation(CollapsedWidth, duration) { EasingFunction = ease };
+            var heightAnim = new DoubleAnimation(CollapsedHeight, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+            MascotContainerGrid.Visibility = Visibility.Visible;
+            if (_currentAgentState == Orbit.Models.AgentState.Idle && !PillMascot.IsHoldingDoneState)
+            {
+                PillMascot.RestoreNormalEyes(TimeSpan.FromMilliseconds(180));
+            }
+            var mascotFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180))
+            {
+                BeginTime = TimeSpan.FromMilliseconds(60),
+                EasingFunction = ease
+            };
+            MascotContainerGrid.BeginAnimation(OpacityProperty, mascotFadeIn);
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = CollapsedWidth;
+                Height = CollapsedHeight;
+                Left = targetLeft;
+                QuickActionsBar.Width = QuickActionsWidth;
+
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(HeightProperty, null);
+                BeginAnimation(LeftProperty, null);
+
+                UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+                QuickActionsBar.Visibility = Visibility.Collapsed;
+                QuickActionsBar.Opacity = 0.0;
+                AnnotationToolbarPanel.Visibility = Visibility.Collapsed;
+                StandardQuickActionsPanel.Visibility = Visibility.Visible;
+                StandardQuickActionsPanel.Opacity = 1.0;
+
+                MascotContainerGrid.IsHitTestVisible = true;
+                MascotContainerGrid.Opacity = 1.0;
+
+                _isHoverCollapsing = false;
+                _isHovering = false;
+
+                _overlayService.ReapplyTopmost(_hwnd);
+                OrbitLogger.Info(LogCategory, "Annotation mode cleanly collapsed back to normal mascot.");
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(HeightProperty, heightAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+        }
+    }
+
+    private void OnAnnotateBackClicked(object sender, RoutedEventArgs e)
+    {
+        ExitAnnotationToolbarMode(returnToQuickActions: true);
+    }
+
+    private void OnAnnotateCursorClicked(object sender, RoutedEventArgs e)
+    {
+        SelectAnnotationTool(AnnotationToolMode.Cursor);
+    }
+
+    private void OnAnnotatePenClicked(object sender, RoutedEventArgs e)
+    {
+        SelectAnnotationTool(AnnotationToolMode.Pen);
+    }
+
+    private void OnAnnotateEraserClicked(object sender, RoutedEventArgs e)
+    {
+        SelectAnnotationTool(AnnotationToolMode.Eraser);
+    }
+
+    private void OnAnnotateClearClicked(object sender, RoutedEventArgs e)
+    {
+        _annotationOverlayWindow?.ClearAllStrokes();
+        OrbitLogger.Info(LogCategory, "Annotation Clear All clicked.");
+    }
+
+    private async void OnAnnotateSaveClicked(object sender, RoutedEventArgs e)
+    {
+        await CaptureAnnotationScreenshotAsync();
+    }
+
+    private void OnAnnotateTuckClicked(object sender, RoutedEventArgs e)
+    {
+        TuckAnnotationToolbar(true);
+    }
+
+    private void OnTuckedAnnotationRestoreClicked(object sender, RoutedEventArgs e)
+    {
+        TuckAnnotationToolbar(false);
+    }
+
+    private void OnTuckedAnnotationRestoreMouseEnter(object sender, MouseEventArgs e)
+    {
+        TuckAnnotationToolbar(false);
+    }
+
+    public void TuckAnnotationToolbar(bool tuck)
+    {
+        if (!_isAnnotationModeActive || _isAnnotationToolbarTucked == tuck) return;
+        _isAnnotationToolbarTucked = tuck;
+
+        if (AnnotationColorPalettePopup != null)
+        {
+            AnnotationColorPalettePopup.IsOpen = false;
+        }
+
+        var primary = _monitorService.GetPrimaryMonitor();
+        double targetWidth = tuck ? TuckedToolbarWidth : AnnotationToolbarWidth;
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, targetWidth, TopMargin);
+
+        var duration = TimeSpan.FromMilliseconds(200);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
+
+        if (tuck)
+        {
+            // Fade out full toolbar panel
+            AnnotationToolbarPanel.BeginAnimation(OpacityProperty, null);
+            AnnotationToolbarPanel.Visibility = Visibility.Collapsed;
+            AnnotationToolbarPanel.Opacity = 0.0;
+            AnnotationToolbarPanel.IsHitTestVisible = false;
+
+            // Animate width to tucked width
+            var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+            var barWidthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = targetWidth;
+                Left = targetLeft;
+                QuickActionsBar.Width = targetWidth;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(LeftProperty, null);
+                QuickActionsBar.BeginAnimation(WidthProperty, null);
+
+                UpdateUnifiedIslandGeometry(targetWidth, QuickActionsHeight);
+                _overlayService.ReapplyTopmost(_hwnd);
+
+                // Reveal tucked restore button
+                if (BtnTuckedAnnotationRestore != null)
+                {
+                    BtnTuckedAnnotationRestore.Visibility = Visibility.Visible;
+                    BtnTuckedAnnotationRestore.Opacity = 1.0;
+                    BtnTuckedAnnotationRestore.IsHitTestVisible = true;
+                }
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+            QuickActionsBar.BeginAnimation(WidthProperty, barWidthAnim);
+            OrbitLogger.Info(LogCategory, "Annotation toolbar tucked away.");
+        }
+        else
+        {
+            // Hide tucked restore button
+            if (BtnTuckedAnnotationRestore != null)
+            {
+                BtnTuckedAnnotationRestore.Visibility = Visibility.Collapsed;
+                BtnTuckedAnnotationRestore.Opacity = 0.0;
+                BtnTuckedAnnotationRestore.IsHitTestVisible = false;
+            }
+
+            // Animate width back to full toolbar width
+            var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+            var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+            var barWidthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+
+            widthAnim.Completed += (s, e) =>
+            {
+                Width = targetWidth;
+                Left = targetLeft;
+                QuickActionsBar.Width = targetWidth;
+                BeginAnimation(WidthProperty, null);
+                BeginAnimation(LeftProperty, null);
+                QuickActionsBar.BeginAnimation(WidthProperty, null);
+
+                UpdateUnifiedIslandGeometry(targetWidth, QuickActionsHeight);
+                _overlayService.ReapplyTopmost(_hwnd);
+
+                // Reveal full toolbar panel
+                AnnotationToolbarPanel.Visibility = Visibility.Visible;
+                AnnotationToolbarPanel.Opacity = 1.0;
+                AnnotationToolbarPanel.IsHitTestVisible = true;
+            };
+
+            BeginAnimation(WidthProperty, widthAnim);
+            BeginAnimation(LeftProperty, leftAnim);
+            QuickActionsBar.BeginAnimation(WidthProperty, barWidthAnim);
+            OrbitLogger.Info(LogCategory, "Annotation toolbar restored from tucked state.");
+        }
+    }
+
+    /// <summary>
+    /// Captures the full screen combining underlying windows and annotation ink strokes,
+    /// excluding the ORBIT dynamic island toolbar. Saves to Pictures\ORBIT Screenshots and copies to Clipboard.
+    /// </summary>
+    public async Task<string?> CaptureAnnotationScreenshotAsync()
+    {
+        try
+        {
+            OrbitLogger.Info(LogCategory, "Starting annotation screenshot capture.");
+
+            // 1. Temporarily hide MainWindow and Palette popup
+            bool paletteWasOpen = AnnotationColorPalettePopup != null && AnnotationColorPalettePopup.IsOpen;
+            if (paletteWasOpen)
+            {
+                AnnotationColorPalettePopup.IsOpen = false;
+            }
+
+            double previousOpacity = Opacity;
+            Opacity = 0.0;
+
+            // Wait a brief frame so DWM composites the desktop without MainWindow
+            await Task.Delay(50);
+
+            // Determine virtual screen bounds (spans all connected monitors)
+            int left = (int)SystemParameters.VirtualScreenLeft;
+            int top = (int)SystemParameters.VirtualScreenTop;
+            int width = (int)SystemParameters.VirtualScreenWidth;
+            int height = (int)SystemParameters.VirtualScreenHeight;
+
+            using var bitmap = new System.Drawing.Bitmap(width, height);
+            using (var g = System.Drawing.Graphics.FromImage(bitmap))
+            {
+                g.CopyFromScreen(left, top, 0, 0, new System.Drawing.Size(width, height), System.Drawing.CopyPixelOperation.SourceCopy);
+            }
+
+            // Restore MainWindow visibility
+            Opacity = previousOpacity;
+            if (paletteWasOpen)
+            {
+                AnnotationColorPalettePopup.IsOpen = true;
+            }
+
+            // Trigger visual shutter flash on the overlay
+            _annotationOverlayWindow?.TriggerShutterFlash();
+
+            // 2. Determine target save file path
+            string picturesDir = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            string screenshotsDir = Path.Combine(picturesDir, "ORBIT Screenshots");
+            Directory.CreateDirectory(screenshotsDir);
+
+            string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string fileName = $"ORBIT_Annotation_{timestamp}.png";
+            string filePath = Path.Combine(screenshotsDir, fileName);
+
+            int suffix = 1;
+            while (File.Exists(filePath))
+            {
+                filePath = Path.Combine(screenshotsDir, $"ORBIT_Annotation_{timestamp}_{suffix++}.png");
+            }
+
+            // 3. Save composited bitmap as PNG
+            bitmap.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
+            OrbitLogger.Info(LogCategory, $"Annotation screenshot saved to: {filePath}");
+
+            // 4. Copy actual image data to Windows Clipboard on UI/STA thread
+            try
+            {
+                using var ms = new MemoryStream();
+                bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                ms.Position = 0;
+
+                var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
+                bitmapImage.BeginInit();
+                bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                bitmapImage.StreamSource = ms;
+                bitmapImage.EndInit();
+                bitmapImage.Freeze();
+
+                System.Windows.Clipboard.SetImage(bitmapImage);
+                OrbitLogger.Info(LogCategory, "Annotation screenshot copied to Windows clipboard.");
+            }
+            catch (Exception clipEx)
+            {
+                OrbitLogger.Warn(LogCategory, $"Failed to copy screenshot to clipboard: {clipEx.Message}");
+            }
+
+            // 5. Show toast notification on the dynamic island
+            ShowAnnotationToast("Screenshot saved & copied!");
+
+            return filePath;
+        }
+        catch (Exception ex)
+        {
+            Opacity = 1.0;
+            OrbitLogger.Error(LogCategory, $"Failed to capture annotation screenshot: {ex.Message}");
+            ShowAnnotationToast("Failed to save screenshot", isError: true);
+            return null;
+        }
+    }
+
+    private CancellationTokenSource? _annotationToastCts;
+
+    public void ShowAnnotationToast(string message, bool isError = false)
+    {
+        if (AnnotationToastBorder == null || TxtAnnotationToast == null) return;
+
+        _annotationToastCts?.Cancel();
+        _annotationToastCts = new CancellationTokenSource();
+        var ct = _annotationToastCts.Token;
+
+        TxtAnnotationToast.Text = message;
+        if (isError)
+        {
+            AnnotationToastBorder.BorderBrush = new SolidColorBrush(MediaColor.FromRgb(0xF4, 0x3F, 0x5E));
+            TxtAnnotationToast.Foreground = new SolidColorBrush(MediaColor.FromRgb(0xFB, 0x71, 0x85));
+        }
+        else
+        {
+            AnnotationToastBorder.BorderBrush = new SolidColorBrush(MediaColor.FromRgb(0x4A, 0xDE, 0x80));
+            TxtAnnotationToast.Foreground = new SolidColorBrush(MediaColor.FromRgb(0x4A, 0xDE, 0x80));
+        }
+
+        AnnotationToastBorder.Visibility = Visibility.Visible;
+        AnnotationToastBorder.Opacity = 1.0;
+
+        Task.Delay(2400, ct).ContinueWith(t =>
+        {
+            if (t.IsCanceled) return;
+            Dispatcher.InvokeAsync(() =>
+            {
+                var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(200));
+                fadeOut.Completed += (s, e) =>
+                {
+                    AnnotationToastBorder.Visibility = Visibility.Collapsed;
+                };
+                AnnotationToastBorder.BeginAnimation(OpacityProperty, fadeOut);
+            });
+        }, TaskScheduler.Default);
+    }
+
+    private void ShowAnnotationHideConfirmation()
+    {
+        _isConfirmHideDialogOpen = true;
+        try
+        {
+            OrbitLogger.Info(LogCategory, "Showing annotation hide confirmation dialog.");
+            var dialog = new Orbit.UI.AnnotationConfirmHideDialog();
+            dialog.Owner = this;
+            bool? result = dialog.ShowDialog();
+
+            if (result == true)
+            {
+                OrbitLogger.Info(LogCategory, "User confirmed clearing annotations and hiding ORBIT.");
+                ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: true);
+                _lifecycleService.Hide();
+            }
+            else
+            {
+                OrbitLogger.Info(LogCategory, "User cancelled hide request. Continuing annotation session.");
+            }
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Error(LogCategory, $"Failed to show hide confirmation dialog: {ex.Message}");
+        }
+        finally
+        {
+            _isConfirmHideDialogOpen = false;
+        }
+    }
+
+    private IntPtr _keyboardHook = IntPtr.Zero;
+    private NativeMethods.LowLevelKeyboardProc? _keyboardProc;
+
+    private void InstallAnnotationKeyboardHook()
+    {
+        if (_keyboardHook != IntPtr.Zero) return;
+
+        try
+        {
+            _keyboardProc = LowLevelKeyboardCallback;
+            using var currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+            using var currentModule = currentProcess.MainModule;
+            var moduleHandle = NativeMethods.GetModuleHandle(currentModule?.ModuleName);
+
+            _keyboardHook = NativeMethods.SetWindowsHookEx(
+                NativeMethods.WH_KEYBOARD_LL,
+                _keyboardProc,
+                moduleHandle,
+                0);
+
+            OrbitLogger.Info(LogCategory, $"Scoped annotation keyboard hook installed (Hook=0x{_keyboardHook.ToInt64():X}).");
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Failed to install annotation keyboard hook: {ex.Message}");
+        }
+    }
+
+    private void UninstallAnnotationKeyboardHook()
+    {
+        if (_keyboardHook == IntPtr.Zero) return;
+
+        try
+        {
+            NativeMethods.UnhookWindowsHookEx(_keyboardHook);
+            OrbitLogger.Info(LogCategory, "Scoped annotation keyboard hook uninstalled.");
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Warn(LogCategory, $"Failed to uninstall annotation keyboard hook: {ex.Message}");
+        }
+        finally
+        {
+            _keyboardHook = IntPtr.Zero;
+            _keyboardProc = null;
+        }
+    }
+
+    private IntPtr LowLevelKeyboardCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0 && (wParam == (IntPtr)NativeMethods.WM_KEYDOWN || wParam == (IntPtr)NativeMethods.WM_SYSKEYDOWN))
+        {
+            int vkCode = Marshal.ReadInt32(lParam);
+            if (vkCode == NativeMethods.VK_ESCAPE && _isAnnotationModeActive)
+            {
+                OrbitLogger.Info(LogCategory, "Global Escape key pressed during annotation mode. Exiting annotation mode.");
+                Dispatcher.InvokeAsync(() =>
+                {
+                    if (_isAnnotationModeActive)
+                    {
+                        ExitAnnotationToolbarMode(returnToQuickActions: false, immediate: false);
+                    }
+                });
+                return (IntPtr)1; // Consume Escape key
+            }
+        }
+
+        return NativeMethods.CallNextHookEx(_keyboardHook, nCode, wParam, lParam);
+    }
+
+    public void SelectAnnotationTool(AnnotationToolMode mode)
+    {
+        _currentAnnotationTool = mode;
+        UpdateAnnotationToolVisuals();
+
+        // Subtle animation when switching tools
+        if (mode == AnnotationToolMode.Cursor)
+            AnimateToolButtonSelection(BorderAnnotateCursorBg);
+        else if (mode == AnnotationToolMode.Pen)
+            AnimateToolButtonSelection(BorderAnnotatePenBg);
+        else if (mode == AnnotationToolMode.Eraser)
+            AnimateToolButtonSelection(BorderAnnotateEraserBg);
+
+        _annotationOverlayWindow?.SetTool(mode);
+
+        OrbitLogger.Info(LogCategory, $"Annotation tool selected: {mode}");
+    }
+
+    private void AnimateToolButtonSelection(Border? border)
+    {
+        if (border == null) return;
+        if (border.RenderTransform is not ScaleTransform)
+        {
+            border.RenderTransformOrigin = new Point(0.5, 0.5);
+            border.RenderTransform = new ScaleTransform(1.0, 1.0);
+        }
+        var scaleAnim = new DoubleAnimation(0.88, 1.0, TimeSpan.FromMilliseconds(160))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        border.RenderTransform.BeginAnimation(ScaleTransform.ScaleXProperty, scaleAnim);
+        border.RenderTransform.BeginAnimation(ScaleTransform.ScaleYProperty, scaleAnim);
+    }
+
+    private void UpdateAnnotationToolVisuals()
+    {
+        // 1. Cursor / Select Tool
+        // Unselected: white border only, transparent fill.
+        // Selected: blue color fill & stroke + blue neon glow.
+        bool isCursor = _currentAnnotationTool == AnnotationToolMode.Cursor;
+        if (BorderAnnotateCursorBg != null)
+        {
+            BorderAnnotateCursorBg.Background = Brushes.Transparent;
+            BorderAnnotateCursorBg.BorderBrush = Brushes.Transparent;
+            BorderAnnotateCursorBg.BorderThickness = new Thickness(0);
+            BorderAnnotateCursorBg.Effect = null;
+        }
+        if (IconAnnotateCursor != null)
+        {
+            IconAnnotateCursor.Fill = isCursor
+                ? new SolidColorBrush(MediaColor.FromRgb(0x38, 0xBD, 0xF8))
+                : Brushes.Transparent;
+            IconAnnotateCursor.Stroke = isCursor
+                ? new SolidColorBrush(MediaColor.FromRgb(0x38, 0xBD, 0xF8))
+                : Brushes.White;
+            IconAnnotateCursor.Effect = isCursor
+                ? new System.Windows.Media.Effects.DropShadowEffect { Color = MediaColor.FromRgb(0x38, 0xBD, 0xF8), BlurRadius = 10, ShadowDepth = 0, Opacity = 0.95 }
+                : null;
+        }
+
+        // 2. Pen Tool
+        // Normally: white bordered, filled with color chosen from palette.
+        // When selected: neon border glow matching the chosen color!
+        bool isPen = _currentAnnotationTool == AnnotationToolMode.Pen;
+        if (BorderAnnotatePenBg != null)
+        {
+            BorderAnnotatePenBg.Background = Brushes.Transparent;
+            BorderAnnotatePenBg.BorderBrush = Brushes.Transparent;
+            BorderAnnotatePenBg.BorderThickness = new Thickness(0);
+            BorderAnnotatePenBg.Effect = null;
+        }
+        if (IconAnnotatePen != null)
+        {
+            IconAnnotatePen.Stroke = Brushes.White;
+            IconAnnotatePen.Fill = new SolidColorBrush(_currentAnnotationColor);
+            IconAnnotatePen.Effect = isPen
+                ? new System.Windows.Media.Effects.DropShadowEffect { Color = _currentAnnotationColor, BlurRadius = 12, ShadowDepth = 0, Opacity = 1.0 }
+                : null;
+        }
+
+        // 3. Eraser Tool
+        // Unselected: white border only, transparent fill.
+        // When selected: filled white with white neon glow!
+        bool isEraser = _currentAnnotationTool == AnnotationToolMode.Eraser;
+        if (BorderAnnotateEraserBg != null)
+        {
+            BorderAnnotateEraserBg.Background = Brushes.Transparent;
+            BorderAnnotateEraserBg.BorderBrush = Brushes.Transparent;
+            BorderAnnotateEraserBg.BorderThickness = new Thickness(0);
+            BorderAnnotateEraserBg.Effect = null;
+        }
+        if (IconAnnotateEraser != null)
+        {
+            IconAnnotateEraser.Fill = isEraser ? Brushes.White : Brushes.Transparent;
+            IconAnnotateEraser.Stroke = Brushes.White;
+            IconAnnotateEraser.Effect = isEraser
+                ? new System.Windows.Media.Effects.DropShadowEffect { Color = MediaColor.FromRgb(0xFF, 0xFF, 0xFF), BlurRadius = 10, ShadowDepth = 0, Opacity = 0.95 }
+                : null;
+        }
+
+        // 4. Update Current Color Swatch in toolbar
+        if (BorderCurrentColorSwatch != null)
+        {
+            BorderCurrentColorSwatch.Background = new SolidColorBrush(_currentAnnotationColor);
+        }
+        if (GlowCurrentColorSwatch != null)
+        {
+            GlowCurrentColorSwatch.Color = _currentAnnotationColor;
+        }
+    }
+
+    private void OnAnnotateToolButtonMouseEnter(object sender, MouseEventArgs e)
+    {
+        var hoverBrush = new SolidColorBrush(MediaColor.FromArgb(0x18, 0xFF, 0xFF, 0xFF));
+        if (ReferenceEquals(sender, BtnAnnotateCursor) && _currentAnnotationTool != AnnotationToolMode.Cursor && BorderAnnotateCursorBg != null)
+            BorderAnnotateCursorBg.Background = hoverBrush;
+        else if (ReferenceEquals(sender, BtnAnnotatePen) && _currentAnnotationTool != AnnotationToolMode.Pen && BorderAnnotatePenBg != null)
+            BorderAnnotatePenBg.Background = hoverBrush;
+        else if (ReferenceEquals(sender, BtnAnnotateEraser) && _currentAnnotationTool != AnnotationToolMode.Eraser && BorderAnnotateEraserBg != null)
+            BorderAnnotateEraserBg.Background = hoverBrush;
+    }
+
+    private void OnAnnotateToolButtonMouseLeave(object sender, MouseEventArgs e)
+    {
+        UpdateAnnotationToolVisuals();
+    }
+
+    private void OnAnnotateColorPickerClicked(object sender, RoutedEventArgs e)
+    {
+        if (AnnotationColorPalettePopup == null) return;
+        AnnotationColorPalettePopup.IsOpen = !AnnotationColorPalettePopup.IsOpen;
+    }
+
+    private void OnAnnotateColorPickerMouseEnter(object sender, MouseEventArgs e)
+    {
+        if (BorderColorPickerContainer != null)
+            BorderColorPickerContainer.Background = new SolidColorBrush(MediaColor.FromArgb(0x25, 0xFF, 0xFF, 0xFF));
+    }
+
+    private void OnAnnotateColorPickerMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (BorderColorPickerContainer != null)
+            BorderColorPickerContainer.Background = Brushes.Transparent;
+    }
+
+    private void OnPaletteColorPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement elem && elem.Tag is string hex)
+        {
+            OrbitLogger.Info(LogCategory, $"Color swatch selected via PreviewMouseDown: {hex}");
+            SelectAnnotationColor(hex);
+            if (AnnotationColorPalettePopup != null)
+            {
+                AnnotationColorPalettePopup.IsOpen = false;
+            }
+            e.Handled = true;
+        }
+    }
+
+    private void OnPaletteColorClicked(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string hex)
+        {
+            OrbitLogger.Info(LogCategory, $"Color swatch clicked: {hex}");
+            SelectAnnotationColor(hex);
+            if (AnnotationColorPalettePopup != null)
+            {
+                AnnotationColorPalettePopup.IsOpen = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks whether a given physical screen point is over ORBIT's dynamic island or the color palette popup.
+    /// Used by DesktopAnnotationOverlayWindow to return HTTRANSPARENT so ORBIT UI is always clickable.
+    /// </summary>
+    public bool IsPointOverOrbitUI(NativeMethods.POINT pt)
+    {
+        // 1. Check MainWindow screen bounds
+        if (_hwnd != IntPtr.Zero && NativeMethods.IsWindow(_hwnd))
+        {
+            if (NativeMethods.GetWindowRect(_hwnd, out var mainRect))
+            {
+                if (pt.X >= mainRect.Left && pt.X < mainRect.Right &&
+                    pt.Y >= mainRect.Top && pt.Y < mainRect.Bottom)
+                {
+                    return true;
+                }
+            }
+        }
+
+        // 2. Check AnnotationColorPalettePopup if open
+        if (AnnotationColorPalettePopup != null && AnnotationColorPalettePopup.IsOpen)
+        {
+            if (AnnotationColorPalettePopup.Child is UIElement child && child.IsVisible)
+            {
+                try
+                {
+                    if (PresentationSource.FromVisual(child) is HwndSource source &&
+                        source.Handle != IntPtr.Zero && NativeMethods.IsWindow(source.Handle))
+                    {
+                        if (NativeMethods.GetWindowRect(source.Handle, out var popupRect))
+                        {
+                            if (pt.X >= popupRect.Left - 6 && pt.X <= popupRect.Right + 6 &&
+                                pt.Y >= popupRect.Top - 6 && pt.Y <= popupRect.Bottom + 6)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    var topLeft = child.PointToScreen(new Point(0, 0));
+                    var bottomRight = child.PointToScreen(new Point(child.RenderSize.Width, child.RenderSize.Height));
+                    if (pt.X >= topLeft.X - 6 && pt.X <= bottomRight.X + 6 &&
+                        pt.Y >= topLeft.Y - 6 && pt.Y <= bottomRight.Y + 6)
+                    {
+                        return true;
+                    }
+                }
+                catch
+                {
+                    // Visual tree might be detaching during close
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public void SelectAnnotationColor(string hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return;
+
+        try
+        {
+            var color = (MediaColor)System.Windows.Media.ColorConverter.ConvertFromString(hex);
+            _currentAnnotationColorHex = hex;
+            _currentAnnotationColor = color;
+
+            UpdatePaletteCheckmarks(hex);
+            UpdateAnnotationToolVisuals();
+
+            _annotationOverlayWindow?.SetPenColor(_currentAnnotationColor);
+
+            OrbitLogger.Info(LogCategory, $"Annotation color selected: {hex}");
+        }
+        catch (Exception ex)
+        {
+            OrbitLogger.Error(LogCategory, $"Failed to set annotation color {hex}: {ex.Message}");
+        }
+    }
+
+    private void UpdatePaletteCheckmarks(string selectedHex)
+    {
+        if (Check_Red != null) Check_Red.Visibility = string.Equals(selectedHex, "#EF4444", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Orange != null) Check_Orange.Visibility = string.Equals(selectedHex, "#F97316", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Yellow != null) Check_Yellow.Visibility = string.Equals(selectedHex, "#EAB308", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Green != null) Check_Green.Visibility = string.Equals(selectedHex, "#22C55E", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Cyan != null) Check_Cyan.Visibility = string.Equals(selectedHex, "#06B6D4", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Blue != null) Check_Blue.Visibility = string.Equals(selectedHex, "#3B82F6", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Purple != null) Check_Purple.Visibility = string.Equals(selectedHex, "#A855F7", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Pink != null) Check_Pink.Visibility = string.Equals(selectedHex, "#EC4899", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_White != null) Check_White.Visibility = string.Equals(selectedHex, "#FFFFFF", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+        if (Check_Black != null) Check_Black.Visibility = string.Equals(selectedHex, "#0F172A", StringComparison.OrdinalIgnoreCase) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    #endregion
+
     #region Two-Stage Expansion and Collapse
 
     private void ExecuteTwoStageExpansion()
@@ -2552,6 +3620,22 @@ public partial class MainWindow : Window
     {
         Close();
         Application.Current.Shutdown();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_annotationOverlayWindow != null)
+        {
+            try
+            {
+                _annotationOverlayWindow.ClearAllStrokes();
+                _annotationOverlayWindow.Close();
+            }
+            catch { }
+            _annotationOverlayWindow = null;
+        }
+
+        base.OnClosed(e);
     }
 
     #endregion
