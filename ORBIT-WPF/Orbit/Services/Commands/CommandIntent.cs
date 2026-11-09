@@ -14,7 +14,8 @@ public enum CommandType
     Screenshot,
     TakeNote,
     Clarification,
-    SystemMetrics
+    SystemMetrics,
+    GenerateCode
 }
 
 /// <summary>
@@ -55,6 +56,7 @@ public record CommandIntent(
     string? Query = null,
     CommandIntent? PendingAction = null,
     string? ClarificationPrompt = null,
-    SystemMetricsSubtype? MetricsSubtype = null
+    SystemMetricsSubtype? MetricsSubtype = null,
+    Orbit.Services.CodeGeneration.CodeGenerationIntentData? CodeGenData = null
 );
 

@@ -91,6 +91,7 @@ public partial class MainWindow : Window
     private bool _isClarificationActive = false;
     private bool _isAwaitingVoiceReply = false;
     private DispatcherTimer? _aiDismissTimer;
+    private DispatcherTimer? _dialogTimeoutTimer;
     private DateTime _aiDismissTargetUtc;
     private int _aiDismissRemainingMs = 6000;
     public bool IsAiGenerating => _isAiGenerating;
@@ -1740,6 +1741,8 @@ public partial class MainWindow : Window
     {
         if (_isVoiceModeActive || _isTransitioningToFullExpand) return;
 
+        StopDialogTimeoutTimer();
+
         // Cancel any pending collapse delay or in-flight hover collapse immediately
         CancelHoverTimer();
         CancelCollapseDelay();
@@ -2152,8 +2155,8 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                // Check pending clarification voice response
-                if (_aiAssistantService.PendingClarification != null)
+                // Check pending clarification voice response (for non-codegen flows)
+                if (_aiAssistantService.PendingClarification != null && _aiAssistantService.PendingClarification.Type != CommandType.GenerateCode)
                 {
                     string cleanSpoken = text.Trim().ToLowerInvariant();
                     // 1. Clear affirmative
@@ -2411,9 +2414,10 @@ public partial class MainWindow : Window
             AiResponseText.Text += sb.ToString();
             AiResponseScrollViewer.ScrollToEnd();
 
-            // Dynamically adjust window height smoothly
+            // Dynamically adjust window height smoothly (elevated minHeight when awaiting user voice input)
             AiResponseBubble.UpdateLayout();
-            double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+            double minH = _isAwaitingVoiceReply ? 175.0 : 140.0;
+            double desiredHeight = Math.Min(260.0, Math.Max(minH, AiResponseBubble.ActualHeight + 52.0));
             if (desiredHeight > Height + 6.0)
             {
                 Height = desiredHeight;
@@ -2428,7 +2432,7 @@ public partial class MainWindow : Window
                 if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
                 _aiDismissTimer?.Stop(); // Auto-dismiss timer paused while awaiting user input!
                 AiResponseBubble.UpdateLayout();
-                double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+                double desiredHeight = Math.Min(260.0, Math.Max(175.0, AiResponseBubble.ActualHeight + 52.0));
                 Height = desiredHeight;
                 UpdateUnifiedIslandGeometry(Width, Height);
             }
@@ -2457,9 +2461,11 @@ public partial class MainWindow : Window
         if (_typewriterCompleted && _isAwaitingVoiceReply)
         {
             if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
+            if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
             _aiDismissTimer?.Stop();
+            StartDialogTimeoutTimer();
             AiResponseBubble.UpdateLayout();
-            double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+            double desiredHeight = Math.Min(260.0, Math.Max(175.0, AiResponseBubble.ActualHeight + 52.0));
             Height = desiredHeight;
             UpdateUnifiedIslandGeometry(Width, Height);
         }
@@ -2500,8 +2506,16 @@ public partial class MainWindow : Window
         // Ensure bubble is open
         EnsureAiResponseBubbleOpen();
 
+        // Prevent duplicating text if already written (e.g. from clarification prompt or prior stream)
+        if (!string.IsNullOrWhiteSpace(AiResponseText.Text) &&
+            (AiResponseText.Text.Trim().Equals(fullResponse?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+             AiResponseText.Text.Trim().EndsWith(fullResponse?.Trim() ?? string.Empty, StringComparison.OrdinalIgnoreCase)))
+        {
+            _typewriterQueue.Clear();
+            _typewriterCompleted = true;
+        }
         // If no tokens were streamed before completion, enqueue full response to type out
-        if (string.IsNullOrWhiteSpace(AiResponseText.Text) && _typewriterQueue.Count == 0 && !string.IsNullOrWhiteSpace(fullResponse))
+        else if (string.IsNullOrWhiteSpace(AiResponseText.Text) && _typewriterQueue.Count == 0 && !string.IsNullOrWhiteSpace(fullResponse))
         {
             foreach (char c in fullResponse)
             {
@@ -2524,7 +2538,8 @@ public partial class MainWindow : Window
 
         AiResponseScrollViewer.ScrollToEnd();
         AiResponseBubble.UpdateLayout();
-        double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+        double completionMinH = awaiting ? 175.0 : 140.0;
+        double desiredHeight = Math.Min(260.0, Math.Max(completionMinH, AiResponseBubble.ActualHeight + 52.0));
         Height = desiredHeight;
         UpdateUnifiedIslandGeometry(Width, Height);
 
@@ -2533,15 +2548,19 @@ public partial class MainWindow : Window
             if (awaiting)
             {
                 if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
+                if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
                 _aiDismissTimer?.Stop(); // Auto-dismiss timer paused while awaiting user input!
+                StartDialogTimeoutTimer();
                 AiResponseBubble.UpdateLayout();
-                desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+                desiredHeight = Math.Min(260.0, Math.Max(175.0, AiResponseBubble.ActualHeight + 52.0));
                 Height = desiredHeight;
                 UpdateUnifiedIslandGeometry(Width, Height);
             }
             else
             {
+                StopDialogTimeoutTimer();
                 if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+                if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
                 StartAiDismissTimer();
             }
         }
@@ -2581,27 +2600,39 @@ public partial class MainWindow : Window
         _aiDismissTimer?.Stop();
 
         EnsureAiResponseBubbleOpen();
-        FlushTypewriterQueue();
+        _typewriterTimer.Stop();
+        _typewriterQueue.Clear();
+        _typewriterCompleted = true;
 
         string promptText = intent.ClarificationPrompt ?? $"Did you mean {intent.Target}?";
         AiResponseText.Text = promptText;
-        ClarificationActionPanel.Visibility = Visibility.Visible;
+
+        // Show voice reply, hide buttons (never show both)
+        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+        if (AiVoiceReplyPanel != null)
+        {
+            AiVoiceReplyPanel.Visibility = Visibility.Visible;
+        }
+
+        StartDialogTimeoutTimer();
 
         PillMascot.SetAiGenerating(false);
         PillMascot.SetAiState(Orbit.Models.AgentState.Attention, "Clarifying");
 
         AiResponseBubble.UpdateLayout();
-        double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+        double desiredHeight = Math.Min(260.0, Math.Max(175.0, AiResponseBubble.ActualHeight + 52.0));
         Height = desiredHeight;
         UpdateUnifiedIslandGeometry(Width, Height);
 
-        AnimateAiWindowDimensions(targetWidth: 400.0, targetHeight: 160.0);
+        AnimateAiWindowDimensions(targetWidth: 400.0, targetHeight: 175.0);
     }
 
     private void OnAiClarificationDismissed()
     {
         _isClarificationActive = false;
-        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+        StopDialogTimeoutTimer();
+        if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
+        if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
     }
 
     private async void OnClarificationYesClicked(object sender, RoutedEventArgs e)
@@ -2654,6 +2685,30 @@ public partial class MainWindow : Window
         _aiDismissTimer.Start();
     }
 
+    private void StartDialogTimeoutTimer(int timeoutSeconds = 15)
+    {
+        _dialogTimeoutTimer?.Stop();
+        _dialogTimeoutTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(timeoutSeconds)
+        };
+        _dialogTimeoutTimer.Tick += (s, e) =>
+        {
+            _dialogTimeoutTimer.Stop();
+            OrbitLogger.Info(LogCategory, "Dialog timeout reached without user input. Forgetting pending request.");
+            _isClarificationActive = false;
+            _isAwaitingVoiceReply = false;
+            _aiAssistantService?.RejectClarification();
+            DismissAiResponseBubble();
+        };
+        _dialogTimeoutTimer.Start();
+    }
+
+    private void StopDialogTimeoutTimer()
+    {
+        _dialogTimeoutTimer?.Stop();
+    }
+
     private void OnAiResponseBubbleMouseEnter(object sender, MouseEventArgs e)
     {
         FlushTypewriterQueue();
@@ -2676,10 +2731,12 @@ public partial class MainWindow : Window
     public void DismissAiResponseBubble()
     {
         _aiDismissTimer?.Stop();
+        StopDialogTimeoutTimer();
         _isClarificationActive = false;
         _isAwaitingVoiceReply = false;
         if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
         if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+        _aiAssistantService?.RejectClarification();
         _aiAssistantService?.ResetConversation();
 
         _isAiResponseBubbleOpen = false;
@@ -2769,6 +2826,7 @@ public partial class MainWindow : Window
 
         // Stop auto-dismiss timer and hide the reply button while recording
         _aiDismissTimer?.Stop();
+        StopDialogTimeoutTimer();
         _isAwaitingVoiceReply = false;
         if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
 

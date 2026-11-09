@@ -23,7 +23,8 @@ public interface IOllamaClient : IDisposable
         IEnumerable<AiChatMessage> messages,
         Action<string> onChunkReceived,
         string model = "qwen2.5:3b",
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        int numPredict = 150);
     Task<bool> UnloadModelAsync(string model = "qwen2.5:3b", CancellationToken cancellationToken = default);
 }
 
@@ -69,7 +70,8 @@ public sealed class OllamaClient : IOllamaClient
         IEnumerable<AiChatMessage> messages,
         Action<string> onChunkReceived,
         string model = "qwen2.5:3b",
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int numPredict = 150)
     {
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(onChunkReceived);
@@ -84,7 +86,7 @@ public sealed class OllamaClient : IOllamaClient
             options = new
             {
                 temperature = 0.4,
-                num_predict = 150
+                num_predict = numPredict
             }
         };
 

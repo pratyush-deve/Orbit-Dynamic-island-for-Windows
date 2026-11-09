@@ -28,7 +28,8 @@ public class AiAssistantServiceTests
             IEnumerable<AiChatMessage> messages,
             Action<string> onChunkReceived,
             string model = "qwen2.5:3b",
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            int numPredict = 150)
         {
             LastMessages.Clear();
             LastMessages.AddRange(messages);

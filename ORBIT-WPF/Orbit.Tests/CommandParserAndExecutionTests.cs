@@ -709,5 +709,20 @@ public class CommandParserAndExecutionTests
         // Should NOT route to WebsiteSearch with scope="the middle"
         Assert.NotEqual(CommandType.WebsiteSearch, intent.Type);
     }
+
+    [Theory]
+    [InlineData("search kalinga in google", "kalinga")]
+    [InlineData("search, kalinga, university in Google", "kalinga university")]
+    [InlineData("-open, google, chrome, search for kalinga university", "kalinga university")]
+    [InlineData("look up kalinga in google", "kalinga")]
+    [InlineData("find kalinga university on google", "kalinga university")]
+    public void CommandParser_RecognizesGoogleSearchVariants_AndStripsWhisperPunctuation(string input, string expectedQuery)
+    {
+        var intent = _parser.Parse(input);
+        Assert.Equal(CommandType.WebSearch, intent.Type);
+        Assert.Equal("google", intent.Scope);
+        Assert.Equal(expectedQuery, intent.Target, ignoreCase: true);
+        Assert.True(intent.Confidence >= 0.80f);
+    }
 }
 

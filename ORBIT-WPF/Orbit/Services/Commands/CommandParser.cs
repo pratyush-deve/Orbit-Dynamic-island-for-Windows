@@ -12,10 +12,12 @@ public sealed class CommandParser : ICommandParser
 {
     private const string LogCategory = "COMMAND_PARSER";
     private readonly AppRegistry _appRegistry;
+    private readonly Orbit.Services.CodeGeneration.ICodeGenerationService _codeGenService;
 
-    public CommandParser(AppRegistry appRegistry)
+    public CommandParser(AppRegistry appRegistry, Orbit.Services.CodeGeneration.ICodeGenerationService? codeGenService = null)
     {
         _appRegistry = appRegistry;
+        _codeGenService = codeGenService ?? new Orbit.Services.CodeGeneration.CodeGenerationService();
     }
 
     public CommandIntent Parse(string rawText)
@@ -58,6 +60,13 @@ public sealed class CommandParser : ICommandParser
             return noteIntent;
         }
 
+        // 3b. Code Generation & File Creation (Checked before File Search & Web Search)
+        var codeGenIntent = TryParseCodeGeneration(normalized, rawText) ?? TryParseCodeGeneration(stripped, rawText);
+        if (codeGenIntent != null)
+        {
+            return codeGenIntent;
+        }
+
         // 4. Local File Search (Checked before Web Search to capture local storage targets)
         var fileSearchIntent = TryParseFileSearch(normalized, rawText) ?? TryParseFileSearch(stripped, rawText);
         if (fileSearchIntent != null)
@@ -93,7 +102,7 @@ public sealed class CommandParser : ICommandParser
     public static string StripConversationalFillers(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-        string cleaned = text.Trim();
+        string cleaned = CleanPunctuation(text);
 
         // Leading greetings and assistant wake names
         cleaned = Regex.Replace(cleaned, @"^(?:hey\s+orbit[, ]*|orbit[, ]*|hey[, ]*|hi[, ]*|hello[, ]*)", "", RegexOptions.IgnoreCase).Trim();
@@ -104,14 +113,21 @@ public sealed class CommandParser : ICommandParser
         // Trailing conversational fillers
         cleaned = Regex.Replace(cleaned, @"\s+(?:for\s+me|right\s+now|now|please|bro|buddy|thanks|thank\s+you)$", "", RegexOptions.IgnoreCase).Trim();
 
-        return cleaned;
+        return CleanPunctuation(cleaned);
     }
 
     private static string CleanPunctuation(string text)
     {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
         var trimmed = text.Trim();
-        char[] toTrim = ['.', '?', '!', ',', '"', '\'', ';', ':'];
-        return trimmed.Trim(toTrim).Trim();
+        char[] toTrim = ['.', '?', '!', ',', '"', '\'', '-', '—', '~', '`', '•'];
+        trimmed = trimmed.Trim(toTrim).Trim();
+        // Replace internal pause commas, tildes, and em-dashes produced by Whisper with spaces
+        trimmed = Regex.Replace(trimmed, @"[,—~]+", " ");
+        // Also replace standalone hyphens or bullet dashes surrounded by spaces (e.g. " - ")
+        trimmed = Regex.Replace(trimmed, @"\s+[-—]\s+", " ");
+        // Collapse multiple spaces
+        return Regex.Replace(trimmed, @"\s+", " ").Trim();
     }
 
     private static string NormalizeNumberWords(string text)
@@ -264,12 +280,152 @@ public sealed class CommandParser : ICommandParser
         return null;
     }
 
+    private CommandIntent? TryParseCodeGeneration(string candidate, string rawText)
+    {
+        // 1. Must start with an action verb (create, write, generate, make, build, save)
+        if (!Regex.IsMatch(candidate, @"^(?:please\s+)?(?:create|write|generate|make|build|save)\b", RegexOptions.IgnoreCase))
+        {
+            return null;
+        }
+
+        // 2. Filter out conversational questions (e.g. "how do I write a program", "explain quicksort in python")
+        if (Regex.IsMatch(candidate, @"^(?:how|why|what|when|where|explain|show)\b", RegexOptions.IgnoreCase))
+        {
+            return null;
+        }
+
+        // 3. Must contain code keywords or programming language references
+        bool hasCodeKeyword = Regex.IsMatch(
+            candidate,
+            @"\b(?:program|script|code|file)\b|(?:\bc\+\+|\bcpp\b|\bc#|\bcsharp\b|\bpython\b|\bpy\b|\bjava\b|\bkotlin\b|\bjavascript\b|\bjs\b|\btypescript\b|\bts\b|\brust\b|\bgo\b|\bc\s+file|\bc\s+program|\bc\s+script)",
+            RegexOptions.IgnoreCase);
+
+        if (!hasCodeKeyword)
+        {
+            return null;
+        }
+
+        // Guard: Do not capture "create a note" or "write a note"
+        if (Regex.IsMatch(candidate, @"\b(?:note|reminder)\b", RegexOptions.IgnoreCase))
+        {
+            return null;
+        }
+
+        // Parse Language
+        var lang = _codeGenService.ParseLanguage(candidate, out string? unsupportedName);
+
+        // Parse Destination (Desktop, Documents, or subdirectories)
+        string rootBase = "Desktop";
+        if (Regex.IsMatch(candidate, @"\b(?:documents|docs)\b", RegexOptions.IgnoreCase))
+        {
+            rootBase = "Documents";
+        }
+
+        string? subFolder = null;
+
+        // 1. "in a folder named as test", "inside folder named test", "in folder called test"
+        var matchNamedFolder = Regex.Match(candidate, @"(?:in|inside)\s+(?:(?:a|the)\s+)?folder\s+(?:named|called)(?:\s+as)?\s+([a-zA-Z0-9_\-]+)", RegexOptions.IgnoreCase);
+        if (matchNamedFolder.Success)
+        {
+            subFolder = matchNamedFolder.Groups[1].Value.Trim();
+        }
+        else
+        {
+            // 2. "in folder test", "inside folder college"
+            var matchFolderDirect = Regex.Match(candidate, @"(?:in|inside)\s+(?:(?:a|the)\s+)?folder\s+([a-zA-Z0-9_\-]+)", RegexOptions.IgnoreCase);
+            if (matchFolderDirect.Success &&
+                !matchFolderDirect.Groups[1].Value.Trim().Equals("desktop", StringComparison.OrdinalIgnoreCase) &&
+                !matchFolderDirect.Groups[1].Value.Trim().Equals("documents", StringComparison.OrdinalIgnoreCase))
+            {
+                subFolder = matchFolderDirect.Groups[1].Value.Trim();
+            }
+            else
+            {
+                // 3. "in the test folder", "in test folder", "inside my college folder"
+                var matchFolderTrailing = Regex.Match(candidate, @"(?:in|inside)\s+(?:the\s+|my\s+|a\s+)?([a-zA-Z0-9_\-]+)\s+folder\b", RegexOptions.IgnoreCase);
+                if (matchFolderTrailing.Success &&
+                    !matchFolderTrailing.Groups[1].Value.Trim().Equals("desktop", StringComparison.OrdinalIgnoreCase) &&
+                    !matchFolderTrailing.Groups[1].Value.Trim().Equals("documents", StringComparison.OrdinalIgnoreCase))
+                {
+                    subFolder = matchFolderTrailing.Groups[1].Value.Trim();
+                }
+            }
+        }
+
+        string destination = !string.IsNullOrEmpty(subFolder) ? $"{rootBase}/{subFolder}" : rootBase;
+
+        // Parse explicit filename if provided
+        string? explicitFileName = null;
+        var matchFileName = Regex.Match(candidate, @"(?:save(?:\s+it)?\s+as|named|name\s+it)\s+([a-zA-Z0-9_\-\.]+\.(?:c|py))\b", RegexOptions.IgnoreCase);
+        if (matchFileName.Success)
+        {
+            explicitFileName = matchFileName.Groups[1].Value.Trim();
+        }
+
+        // Parse Purpose
+        string purpose = ExtractPurpose(candidate);
+
+        var codeGenData = new Orbit.Services.CodeGeneration.CodeGenerationIntentData(
+            Language: lang,
+            Purpose: purpose,
+            DestinationFolder: destination,
+            ProposedFileName: explicitFileName,
+            UnsupportedLanguageName: unsupportedName,
+            Stage: Orbit.Services.CodeGeneration.CodeGenerationStage.Initial
+        );
+
+        return new CommandIntent(
+            Type: CommandType.GenerateCode,
+            RawText: rawText,
+            Confidence: 0.95f,
+            Target: explicitFileName ?? purpose,
+            Scope: destination,
+            Query: purpose,
+            CodeGenData: codeGenData
+        );
+    }
+
+    private static string ExtractPurpose(string candidate)
+    {
+        string text = candidate.Trim();
+
+        // 1. Strip leading trigger + language + program/script/code/file
+        text = Regex.Replace(
+            text,
+            @"^(?:please\s+)?(?:create|write|generate|make|build|save)\s+(?:a\s+)?(?:c\+\+|cpp|c#|csharp|c|python|py|java|kotlin|javascript|js|typescript|ts|rust|go)?\s*(?:program|script|code|file)?\s*",
+            "",
+            RegexOptions.IgnoreCase);
+
+        // 2. Strip root destination references ("in/on desktop", "in documents")
+        text = Regex.Replace(text, @"\b(?:on|in|into|to)\s+(?:my\s+|the\s+)?(?:desktop|documents|docs)\b", "", RegexOptions.IgnoreCase);
+
+        // 3. Strip folder destination clauses
+        text = Regex.Replace(text, @"\b(?:in|inside)\s+(?:(?:a|the)\s+)?folder\s+(?:named|called)(?:\s+as)?\s+[a-zA-Z0-9_\-]+", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\b(?:in|inside)\s+(?:(?:a|the)\s+)?folder\s+[a-zA-Z0-9_\-]+", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\b(?:in|inside)\s+(?:the\s+|my\s+|a\s+)?[a-zA-Z0-9_\-]+\s+folder\b", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\band\s+save(?:\s+it)?\b", "", RegexOptions.IgnoreCase);
+
+        // 4. Strip punctuation and bridge preambles at the start of purpose
+        text = Regex.Replace(text, @"^[,\.\s;:\-]+", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"^(?:the\s+program\s+should|the\s+script\s+should|it\s+should|program\s+should|script\s+should|should|to|for|that|which)\s*", "", RegexOptions.IgnoreCase);
+
+        // 5. Clean punctuation at boundaries and collapse multiple spaces
+        text = Regex.Replace(text, @"^[,\.\s;:\-]+|[,\.\s;:\-]+$", "", RegexOptions.IgnoreCase);
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+
+        // Strip explicit filename clauses
+        text = Regex.Replace(text, @"(?:save(?:\s+it)?\s+as|named|name\s+it)\s+[a-zA-Z0-9_\-\.]+\.(?:c|py).*", "", RegexOptions.IgnoreCase);
+
+        text = text.Trim();
+        return string.IsNullOrWhiteSpace(text) ? "requested program" : text;
+    }
+
     private static CommandIntent? TryParseFileSearch(string normalized, string rawText)
     {
         string candidate = StripConversationalFillers(rawText);
 
         // Guardrail: Explicit web search queries with local words (e.g. "Search the web for desktop wallpapers", "Search Google for download speed")
-        if (Regex.IsMatch(candidate, @"^(?:please\s+)?(?:search\s+(?:the\s+)?web|search\s+google|google\s+search)\b", RegexOptions.IgnoreCase))
+        if (Regex.IsMatch(candidate, @"^(?:please\s+)?(?:search\s+(?:the\s+)?web|search\s+google|google\s+search|search\s+.+?\s+(?:in|on)\s+google)\b", RegexOptions.IgnoreCase))
         {
             return null;
         }
@@ -401,6 +557,17 @@ public sealed class CommandParser : ICommandParser
     private static CommandIntent? TryParseWebSearch(string normalized, string rawText)
     {
         string candidate = StripConversationalFillers(rawText);
+
+        // 0. Explicit "search <query> in/on google", "search for <query> in/on google", "look up <query> in/on google", "find <query> in/on google"
+        var matchInGoogle = Regex.Match(candidate, @"^(?:please\s+)?(?:search|find|look\s+up)(?:\s+for)?\s+(.+?)\s+(?:in|on)\s+google$", RegexOptions.IgnoreCase);
+        if (matchInGoogle.Success)
+        {
+            string query = matchInGoogle.Groups[1].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query, Scope: "google", Query: query);
+            }
+        }
 
         // Explicit Google search: "Google search for Android Studio errors", "Search Google for..."
         var matchGoogleExplicit = Regex.Match(candidate, @"^(?:please\s+)?(?:google\s+search\s+(?:for\s+)?|search\s+google\s+(?:for\s+)?)(.+)$", RegexOptions.IgnoreCase);
@@ -535,7 +702,8 @@ public sealed class CommandParser : ICommandParser
 
                 // If this is actually a search conjunction like "Google and search for...", reject from app launch
                 if (appName.IndexOf(" and search", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    appName.IndexOf(" search for ", StringComparison.OrdinalIgnoreCase) >= 0)
+                    appName.IndexOf(" search for ", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    appName.IndexOf(" search ", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     return null;
                 }

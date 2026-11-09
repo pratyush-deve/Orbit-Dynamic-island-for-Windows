@@ -99,6 +99,8 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<ICommandHandler, SystemMetricsHandler>();
         services.AddSingleton<ICommandHandler, ScreenshotHandler>();
         services.AddSingleton<ICommandHandler, NotesHandler>();
+        services.AddSingleton<Orbit.Services.CodeGeneration.ICodeGenerationService, Orbit.Services.CodeGeneration.CodeGenerationService>();
+        services.AddSingleton<ICommandHandler, GenerateCodeHandler>();
         services.AddSingleton<IVoiceCommandExecutor, CommandExecutionService>();
 
         // 8.7 Local AI Assistant (Ollama, Model Lifecycle, AI Assistant Service)
