@@ -17,6 +17,7 @@ public class AiAssistantServiceTests
         public bool IsServiceAvailable { get; set; } = true;
         public int UnloadCallCount { get; private set; }
         public List<string> StreamChunks { get; set; } = new() { "Hello ", "Pratyush! ", "Orbit is ready." };
+        public List<AiChatMessage> LastMessages { get; } = new();
 
         public Task<bool> CheckServiceHealthAsync(CancellationToken cancellationToken = default)
         {
@@ -29,6 +30,8 @@ public class AiAssistantServiceTests
             string model = "qwen2.5:3b",
             CancellationToken cancellationToken = default)
         {
+            LastMessages.Clear();
+            LastMessages.AddRange(messages);
             foreach (var chunk in StreamChunks)
             {
                 if (cancellationToken.IsCancellationRequested) break;
@@ -206,6 +209,46 @@ public class AiAssistantServiceTests
         var staleResult = await aiService.ConfirmClarificationAsync();
         Assert.Null(staleResult);
         Assert.False(executed);
+    }
+
+    [Fact]
+    public async Task AiAssistantService_PreservesConversationContextAcrossTurns()
+    {
+        var fakeClient = new FakeOllamaClient();
+        var fakeMonitor = new FakeSystemMonitorService();
+        using var lifecycle = new ModelLifecycleManager(fakeClient, fakeMonitor);
+        var appRegistry = new AppRegistry();
+        using var aiService = new AiAssistantService(fakeClient, lifecycle, appRegistry);
+
+        fakeClient.StreamChunks = new() { "Is there a specific task you need help with?" };
+        await aiService.ProcessVoiceTranscriptionAsync("I have a folder with college files.");
+
+        // Turn 1 should have system + user message
+        Assert.Equal(2, fakeClient.LastMessages.Count);
+        Assert.Equal("system", fakeClient.LastMessages[0].Role);
+        Assert.Equal("user", fakeClient.LastMessages[1].Role);
+        Assert.Equal("I have a folder with college files.", fakeClient.LastMessages[1].Content);
+
+        // Turn 2: User replies to ORBIT's question
+        fakeClient.StreamChunks = new() { "Opening your college files folder." };
+        await aiService.ProcessVoiceTranscriptionAsync("Yes, open it.");
+
+        // Turn 2 should have system + turn 1 user + turn 1 assistant + turn 2 user
+        Assert.Equal(4, fakeClient.LastMessages.Count);
+        Assert.Equal("system", fakeClient.LastMessages[0].Role);
+        Assert.Equal("user", fakeClient.LastMessages[1].Role);
+        Assert.Equal("I have a folder with college files.", fakeClient.LastMessages[1].Content);
+        Assert.Equal("assistant", fakeClient.LastMessages[2].Role);
+        Assert.Equal("Is there a specific task you need help with?", fakeClient.LastMessages[2].Content);
+        Assert.Equal("user", fakeClient.LastMessages[3].Role);
+        Assert.Equal("Yes, open it.", fakeClient.LastMessages[3].Content);
+
+        // Explicit reset clears history
+        aiService.ResetConversation();
+        await aiService.ProcessVoiceTranscriptionAsync("What is the weather?");
+        Assert.Equal(2, fakeClient.LastMessages.Count);
+        Assert.Equal("user", fakeClient.LastMessages[1].Role);
+        Assert.Equal("What is the weather?", fakeClient.LastMessages[1].Content);
     }
 
     private sealed class FakeCommandExecutor : IVoiceCommandExecutor

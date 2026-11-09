@@ -24,6 +24,7 @@ public interface IAiAssistantService : IDisposable
 
     Task<string> ProcessVoiceTranscriptionAsync(string transcription, CancellationToken cancellationToken = default);
     void CancelActiveGeneration();
+    void ResetConversation();
 }
 
 public sealed class AiAssistantService : IAiAssistantService
@@ -37,6 +38,7 @@ public sealed class AiAssistantService : IAiAssistantService
     private readonly IVoiceCommandExecutor? _commandExecutor;
     private readonly Orbit.Services.SystemMonitor.ISystemMonitorService? _systemMonitorService;
     private readonly object _stateLock = new();
+    private readonly List<AiChatMessage> _conversationHistory = new();
 
     private CancellationTokenSource? _currentCts;
     private bool _isGenerating;
@@ -173,8 +175,9 @@ Guidelines:
                 // Case B: Deterministic Action Execution (Fast-path with confirmed truth, zero split-brain)
                 if (intent.Type != CommandType.Unknown && intent.Confidence >= 0.60f && _commandExecutor != null)
                 {
-                    // Clear any previous pending clarification on new command
+                    // Clear any previous pending clarification and conversational context on deterministic command
                     PendingClarification = null;
+                    lock (_stateLock) { _conversationHistory.Clear(); }
 
                     OrbitLogger.Info(LogCategory, $"Executing deterministic command intent: {intent.Type} -> '{intent.Target}'");
                     var execResult = await _commandExecutor.ExecuteAsync(intent, linkedCts.Token).ConfigureAwait(false);
@@ -212,9 +215,16 @@ Guidelines:
 
             var messages = new List<AiChatMessage>
             {
-                new("system", BuildSystemPrompt()),
-                new("user", transcription)
+                new("system", BuildSystemPrompt())
             };
+
+            lock (_stateLock)
+            {
+                // Preserve conversational context so replies build directly upon previous questions
+                messages.AddRange(_conversationHistory);
+            }
+
+            messages.Add(new("user", transcription));
 
             await _ollamaClient.StreamChatAsync(
                 messages,
@@ -229,6 +239,16 @@ Guidelines:
 
             string fullResponse = accumulatedResponse.ToString().Trim();
             OrbitLogger.Info(LogCategory, $"AI generation completed ({fullResponse.Length} chars).");
+
+            lock (_stateLock)
+            {
+                _conversationHistory.Add(new("user", transcription));
+                _conversationHistory.Add(new("assistant", fullResponse));
+                while (_conversationHistory.Count > 6)
+                {
+                    _conversationHistory.RemoveAt(0);
+                }
+            }
 
             GenerationCompleted?.Invoke(fullResponse);
             return fullResponse;
@@ -300,6 +320,15 @@ Guidelines:
             _currentCts?.Cancel();
             _pendingClarification = null;
         }
+    }
+
+    public void ResetConversation()
+    {
+        lock (_stateLock)
+        {
+            _conversationHistory.Clear();
+        }
+        OrbitLogger.Debug(LogCategory, "Conversation context reset.");
     }
 
     public void Dispose()

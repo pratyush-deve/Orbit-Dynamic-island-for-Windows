@@ -16,6 +16,8 @@ namespace Orbit.Services.Voice;
 public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
 {
     private const string LogCategory = "WHISPER_SERVICE";
+    public const string VocabularyPrompt =
+        "ORBIT, Windows, Android Studio, Visual Studio Code, VS Code, Antigravity, Kotlin, Java, C sharp, C++, Jetpack Compose, Gradle, Git, GitHub, Firebase, Ollama, Qwen, Whisper, RAM, CPU, GPU, SSD, HDD, Bluetooth, Wi-Fi, PowerShell, File Explorer, Chrome, Gmail, Myntra, Amazon, Flipkart,app, folder, file, open, search, launch, youtube, github,operate, find, status, solve, explain";
 
     private readonly IWhisperModelManager _modelManager;
     private readonly SemaphoreSlim _inferenceLock = new(1, 1);
@@ -81,7 +83,7 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
             _processor = _factory.CreateBuilder()
                 .WithLanguage("en")
                 .WithSingleSegment()
-                .WithNoContext()
+                .WithPrompt(VocabularyPrompt)
                 .WithThreads(threadCount)
                 .WithGreedySamplingStrategy(s => s.WithBestOf(1))
                 .Build();
@@ -92,7 +94,7 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
         }, cancellationToken).ConfigureAwait(false);
 
         sw.Stop();
-        OrbitLogger.Info(LogCategory, $"Whisper engine ({_loadedModelName}) initialized successfully in {sw.ElapsedMilliseconds}ms. Path: {_loadedModelPath}");
+        OrbitLogger.Info(LogCategory, $"Whisper engine ({_loadedModelName}) initialized successfully with vocabulary prompt biasing enabled in {sw.ElapsedMilliseconds}ms. Path: {_loadedModelPath}");
     }
 
     public async Task<string> TranscribePcm16Async(byte[] pcmData, CancellationToken cancellationToken = default)

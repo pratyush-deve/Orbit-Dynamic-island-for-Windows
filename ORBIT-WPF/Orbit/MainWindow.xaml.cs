@@ -89,6 +89,7 @@ public partial class MainWindow : Window
     private bool _isAiGenerating = false;
     private bool _isAiResponseBubbleOpen = false;
     private bool _isClarificationActive = false;
+    private bool _isAwaitingVoiceReply = false;
     private DispatcherTimer? _aiDismissTimer;
     private DateTime _aiDismissTargetUtc;
     private int _aiDismissRemainingMs = 6000;
@@ -359,6 +360,13 @@ public partial class MainWindow : Window
         {
             Dispatcher.Invoke(() =>
             {
+                if (_isVoiceModeActive)
+                {
+                    // While Voice Mode is active, maintain dedicated Voice purple outline and glow
+                    UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
+                    return;
+                }
+
                 _currentAgentState = state;
                 if (state != Orbit.Models.AgentState.Idle)
                 {
@@ -1744,7 +1752,53 @@ public partial class MainWindow : Window
             CloseFileDock(toQuickActions: true);
         }
 
+        // If AI Response Bubble is open, dismiss it visually while keeping conversation context intact
+        if (_isAiResponseBubbleOpen)
+        {
+            _aiDismissTimer?.Stop();
+            _isAiResponseBubbleOpen = false;
+            _isAiGenerating = false;
+            _isAwaitingVoiceReply = false;
+            _typewriterTimer.Stop();
+            _typewriterQueue.Clear();
+            AiResponseBubble.BeginAnimation(OpacityProperty, null);
+            AiResponseBubble.Visibility = Visibility.Collapsed;
+            AiResponseBubble.Opacity = 0.0;
+            if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+        }
+
         _isVoiceModeActive = true;
+
+        // Transition window dimensions and island contour directly to Voice Mode notch (310 x 48 DIP)
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, QuickActionsWidth, TopMargin);
+
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+        BeginAnimation(LeftProperty, null);
+        Width = QuickActionsWidth;
+        Height = QuickActionsHeight;
+        if (!double.IsNaN(targetLeft)) Left = targetLeft;
+        Top = topY;
+        UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
+
+        // Cancel any active Done / Completed green state hold from previous AI generation
+        PillMascot.ResetToIdle(immediate: true);
+        _currentAgentState = Orbit.Models.AgentState.Idle;
+        _currentAgentMessage = string.Empty;
+        StopBinaryStreamAnimation();
+        SetBinaryStreamAiColor(false);
+
+        // Immediately reset notch outline, shelf, and glow from Green back to Voice Mode Purple
+        if (CollapsedNotchOutline != null) CollapsedNotchOutline.Stroke = BrushPurpleNotchOutline;
+        if (MascotNotchBoundaryIndicator != null) MascotNotchBoundaryIndicator.Stroke = BrushPurpleNotchShelf;
+        UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
+
+        // Hide mascot eyes completely during Voice Mode (prevent overlapping with waveform)
+        MascotContainerGrid.BeginAnimation(OpacityProperty, null);
+        MascotContainerGrid.Visibility = Visibility.Collapsed;
+        MascotContainerGrid.Opacity = 0.0;
+        MascotContainerGrid.IsHitTestVisible = false;
 
         // 1. Immediately start audio capture session (0ms hardware lag!)
         bool started = _voiceSessionManager.StartSession();
@@ -1753,8 +1807,17 @@ public partial class MainWindow : Window
             OrbitLogger.Warn(LogCategory, "Could not start voice session (hardware unavailable or access denied).");
         }
 
+        // Ensure QuickActionsBar host is visible for VoiceModePanel while keeping standard action buttons collapsed
+        QuickActionsBar.Visibility = Visibility.Visible;
+        QuickActionsBar.Opacity = 1.0;
+        QuickActionsBar.IsHitTestVisible = true;
+        StandardQuickActionsPanel.Visibility = Visibility.Collapsed;
+        StandardQuickActionsPanel.Opacity = 0.0;
+        StandardQuickActionsPanel.IsHitTestVisible = false;
+
         // 2. Reveal VoiceModePanel with animated waveform immediately
         VoiceModePanel.Visibility = Visibility.Visible;
+        VoiceModePanel.Opacity = 1.0;
         VoiceModePanel.IsHitTestVisible = true;
         _voiceResultTimer?.Stop();
         StopProcessingAnimation();
@@ -2293,6 +2356,8 @@ public partial class MainWindow : Window
 
         // Reset bubble text without opening dialog yet
         AiResponseText.Text = string.Empty;
+        _isAwaitingVoiceReply = false;
+        if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
         AiResponseBubble.Visibility = Visibility.Collapsed;
         AiResponseBubble.Opacity = 0.0;
         AiResponseBubble.IsHitTestVisible = false;
@@ -2358,7 +2423,20 @@ public partial class MainWindow : Window
         else if (_typewriterCompleted)
         {
             _typewriterTimer.Stop();
-            StartAiDismissTimer();
+            if (_isAwaitingVoiceReply)
+            {
+                if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
+                _aiDismissTimer?.Stop(); // Auto-dismiss timer paused while awaiting user input!
+                AiResponseBubble.UpdateLayout();
+                double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+                Height = desiredHeight;
+                UpdateUnifiedIslandGeometry(Width, Height);
+            }
+            else
+            {
+                if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+                StartAiDismissTimer();
+            }
         }
     }
 
@@ -2375,6 +2453,16 @@ public partial class MainWindow : Window
             AiResponseScrollViewer.ScrollToEnd();
         }
         _typewriterTimer.Stop();
+
+        if (_typewriterCompleted && _isAwaitingVoiceReply)
+        {
+            if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
+            _aiDismissTimer?.Stop();
+            AiResponseBubble.UpdateLayout();
+            double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+            Height = desiredHeight;
+            UpdateUnifiedIslandGeometry(Width, Height);
+        }
     }
 
     private void OnAiResponseScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
@@ -2431,6 +2519,9 @@ public partial class MainWindow : Window
         PillMascot.SetAiGenerating(false);
         PillMascot.SetAiState(Orbit.Models.AgentState.Completed, "Complete");
 
+        bool awaiting = IsAwaitingUserInput(fullResponse);
+        _isAwaitingVoiceReply = awaiting;
+
         AiResponseScrollViewer.ScrollToEnd();
         AiResponseBubble.UpdateLayout();
         double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
@@ -2439,7 +2530,20 @@ public partial class MainWindow : Window
 
         if (_typewriterQueue.Count == 0)
         {
-            StartAiDismissTimer();
+            if (awaiting)
+            {
+                if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Visible;
+                _aiDismissTimer?.Stop(); // Auto-dismiss timer paused while awaiting user input!
+                AiResponseBubble.UpdateLayout();
+                desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+                Height = desiredHeight;
+                UpdateUnifiedIslandGeometry(Width, Height);
+            }
+            else
+            {
+                if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+                StartAiDismissTimer();
+            }
         }
     }
 
@@ -2532,7 +2636,7 @@ public partial class MainWindow : Window
 
     private void StartAiDismissTimer(int durationMs = 6000)
     {
-        if (_isClarificationActive) return;
+        if (_isClarificationActive || _isAwaitingVoiceReply) return;
 
         _aiDismissTimer?.Stop();
         _aiDismissRemainingMs = durationMs;
@@ -2563,7 +2667,7 @@ public partial class MainWindow : Window
 
     private void OnAiResponseBubbleMouseLeave(object sender, MouseEventArgs e)
     {
-        if (!_isAiGenerating && _isAiResponseBubbleOpen && !_isClarificationActive)
+        if (!_isAiGenerating && _isAiResponseBubbleOpen && !_isClarificationActive && !_isAwaitingVoiceReply)
         {
             StartAiDismissTimer(_aiDismissRemainingMs);
         }
@@ -2573,7 +2677,10 @@ public partial class MainWindow : Window
     {
         _aiDismissTimer?.Stop();
         _isClarificationActive = false;
+        _isAwaitingVoiceReply = false;
         if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
+        if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+        _aiAssistantService?.ResetConversation();
 
         _isAiResponseBubbleOpen = false;
         _isAiGenerating = false;
@@ -2640,6 +2747,60 @@ public partial class MainWindow : Window
         BeginAnimation(WidthProperty, animW);
         BeginAnimation(HeightProperty, animH);
         BeginAnimation(LeftProperty, animL);
+    }
+
+    private void OnAiVoiceReplyPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        TriggerVoiceReply();
+    }
+
+    private void OnAiVoiceReplyButtonClicked(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        TriggerVoiceReply();
+    }
+
+    private void TriggerVoiceReply()
+    {
+        if (_isVoiceModeActive) return;
+
+        OrbitLogger.Info(LogCategory, "Voice reply button clicked in AI response bubble. Activating voice listening without opening QuickActions.");
+
+        // Stop auto-dismiss timer and hide the reply button while recording
+        _aiDismissTimer?.Stop();
+        _isAwaitingVoiceReply = false;
+        if (AiVoiceReplyPanel != null) AiVoiceReplyPanel.Visibility = Visibility.Collapsed;
+
+        // Activate existing voice-listening flow directly
+        EnterVoiceMode();
+    }
+
+    private static bool IsAwaitingUserInput(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string trimmed = text.Trim();
+
+        // Direct question mark at the end or inside trailing quotes/parentheses
+        if (trimmed.EndsWith('?') || trimmed.EndsWith("?\"") || trimmed.EndsWith("?')") || trimmed.EndsWith("?`"))
+        {
+            return true;
+        }
+
+        // Check if the last sentence or line ends with a question mark
+        var lines = trimmed.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length > 0 && lines[^1].Trim().EndsWith('?'))
+        {
+            return true;
+        }
+
+        var sentences = trimmed.Split(new[] { '.', '!', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        if (sentences.Length > 0 && sentences[^1].Trim().EndsWith('?'))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void AnimateAiWindowDimensions(double targetWidth, double targetHeight)

@@ -1381,6 +1381,72 @@
                                 Cursor="Hand"
                                 Click="OnClarificationNoClicked"/>
                     </StackPanel>
+
+                    <!-- Voice Reply Panel (Small purple mic button in bottom-right corner when awaiting user input) -->
+                    <StackPanel x:Name="AiVoiceReplyPanel"
+                                Grid.Row="2"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Margin="0,6,0,0"
+                                Visibility="Collapsed">
+                        <TextBlock Text="Reply by voice"
+                                   FontSize="10.5"
+                                   FontWeight="Normal"
+                                   Foreground="#A78BFA"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"
+                                   IsHitTestVisible="False"
+                                   Opacity="0.85"/>
+                        <Button x:Name="BtnAiVoiceReply"
+                                Width="26" Height="26"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="0"
+                                Cursor="Hand"
+                                ToolTip="Reply by voice"
+                                Focusable="False"
+                                PreviewMouseLeftButtonDown="OnAiVoiceReplyPreviewMouseDown"
+                                Click="OnAiVoiceReplyButtonClicked">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="MicBg"
+                                            Background="#9333EA"
+                                            CornerRadius="13"
+                                            Width="26" Height="26"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#A855F7" BlurRadius="8" ShadowDepth="0" Opacity="0.6"/>
+                                        </Border.Effect>
+                                        <Path Data="M 9,3 C 7.3,3 6,4.3 6,6 L 6,11 C 6,12.7 7.3,14 9,14 C 10.7,14 12,12.7 12,11 L 12,6 C 12,4.3 10.7,3 9,3 Z M 3,10 C 3,13.3 5.7,16 9,16 C 12.3,16 15,13.3 15,10 M 9,16 L 9,19 M 6,19 L 12,19"
+                                              Stroke="#FFFFFF"
+                                              StrokeThickness="1.4"
+                                              StrokeLineJoin="Round"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              Width="11" Height="14"
+                                              Stretch="Uniform"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="MicBg" Property="Background" Value="#A855F7"/>
+                                            <Setter TargetName="MicBg" Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect Color="#C084FC" BlurRadius="12" ShadowDepth="0" Opacity="0.9"/>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="MicBg" Property="Background" Value="#7E22CE"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Border>
 

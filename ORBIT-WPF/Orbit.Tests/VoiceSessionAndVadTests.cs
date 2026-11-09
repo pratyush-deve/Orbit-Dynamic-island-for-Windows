@@ -353,6 +353,97 @@ public class VoiceSessionAndVadTests
         Assert.NotEmpty(smallResults);
     }
 
+    [Fact]
+    public async System.Threading.Tasks.Task Whisper_Benchmark_BiasedVocabulary_EightEvalPhrases()
+    {
+        string modelsDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ORBIT", "models");
+        string smallPath = System.IO.Path.Combine(modelsDir, "ggml-small.en.bin");
+        string audioDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ORBIT", "test_audio_eval_biased");
+
+        Assert.True(System.IO.File.Exists(smallPath), "Small model must exist");
+
+        var phrases = new[]
+        {
+            ("eval1.wav", "Open Android Studio."),
+            ("eval2.wav", "Operate Studio."),
+            ("eval3.wav", "Open Antigravity."),
+            ("eval4.wav", "Search Myntra for oversized hoodies."),
+            ("eval5.wav", "Check my laptop RAM."),
+            ("eval6.wav", "Open File Explorer and search my desktop."),
+            ("eval7.wav", "Do I have enough memory for Android Studio?"),
+            ("eval8.wav", "Explain Jetpack Compose.")
+        };
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("=== WHISPER VOCABULARY BIASING BENCHMARK: SMALL.EN (NO CONTEXT vs WITH PROMPT) ===");
+
+        // --- Benchmark 1: Small.en with No Context (Baseline) ---
+        using var smallFactory = WhisperFactory.FromPath(smallPath);
+        using var unpromptedProcessor = smallFactory.CreateBuilder()
+            .WithLanguage("en")
+            .WithSingleSegment()
+            .WithNoContext()
+            .WithThreads(2)
+            .Build();
+
+        sb.AppendLine("[Small.en - Without Prompt Biasing]");
+        var unpromptedResults = new System.Collections.Generic.List<(string phrase, string recognized, long latencyMs)>();
+        foreach (var (file, phrase) in phrases)
+        {
+            string wavPath = System.IO.Path.Combine(audioDir, file);
+            float[] samples = LoadWavSamples(wavPath);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var text = new System.Text.StringBuilder();
+            await foreach (var seg in unpromptedProcessor.ProcessAsync(samples))
+            {
+                text.Append(seg.Text).Append(' ');
+            }
+            sw.Stop();
+            string cleaned = WhisperTranscriptionService.CleanRecognizedText(text.ToString());
+            unpromptedResults.Add((phrase, cleaned, sw.ElapsedMilliseconds));
+            sb.AppendLine($"  Unbiased -> \"{phrase}\" => \"{cleaned}\" in {sw.ElapsedMilliseconds}ms");
+        }
+
+        unpromptedProcessor.Dispose();
+
+        // --- Benchmark 2: Small.en with Technical Vocabulary Prompt Biasing ---
+        using var biasedProcessor = smallFactory.CreateBuilder()
+            .WithLanguage("en")
+            .WithSingleSegment()
+            .WithPrompt(WhisperTranscriptionService.VocabularyPrompt)
+            .WithThreads(2)
+            .Build();
+
+        sb.AppendLine("\n[Small.en - With Technical Vocabulary Prompt Biasing]");
+        var biasedResults = new System.Collections.Generic.List<(string phrase, string recognized, long latencyMs)>();
+        foreach (var (file, phrase) in phrases)
+        {
+            string wavPath = System.IO.Path.Combine(audioDir, file);
+            float[] samples = LoadWavSamples(wavPath);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var text = new System.Text.StringBuilder();
+            await foreach (var seg in biasedProcessor.ProcessAsync(samples))
+            {
+                text.Append(seg.Text).Append(' ');
+            }
+            sw.Stop();
+            string cleaned = WhisperTranscriptionService.CleanRecognizedText(text.ToString());
+            biasedResults.Add((phrase, cleaned, sw.ElapsedMilliseconds));
+            sb.AppendLine($"  Biased   -> \"{phrase}\" => \"{cleaned}\" in {sw.ElapsedMilliseconds}ms");
+        }
+
+        biasedProcessor.Dispose();
+
+        string biasReportPath = System.IO.Path.Combine(modelsDir, "benchmark_biased_vocabulary.txt");
+        System.IO.File.WriteAllText(biasReportPath, sb.ToString());
+
+        Assert.NotEmpty(biasedResults);
+    }
+
     private static float[] LoadWavSamples(string wavPath)
     {
         byte[] bytes = System.IO.File.ReadAllBytes(wavPath);
