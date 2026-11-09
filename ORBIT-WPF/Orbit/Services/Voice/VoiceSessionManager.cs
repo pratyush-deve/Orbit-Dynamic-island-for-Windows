@@ -17,7 +17,7 @@ public interface IVoiceSessionManager : IDisposable
     event EventHandler<string>? TranscriptionReceived;
 
     bool StartSession();
-    void StopSession();
+    void StopSession(string reason = "Manual");
     void CancelSession();
 }
 
@@ -116,7 +116,7 @@ public sealed class VoiceSessionManager : IVoiceSessionManager
         }
     }
 
-    public void StopSession()
+    public void StopSession(string reason = "Manual")
     {
         byte[] recordedPcm;
         int sessionId;
@@ -125,16 +125,17 @@ public sealed class VoiceSessionManager : IVoiceSessionManager
         {
             if (_currentState != VoiceSessionState.Listening) return;
 
-            OrbitLogger.Info(LogCategory, "Stopping voice recording and finalizing utterance...");
+            OrbitLogger.Info(LogCategory, $"Stopping voice recording and finalizing utterance (reason: {reason})...");
             _vad.Stop();
             recordedPcm = _captureService.StopCapture();
             sessionId = _sessionCounter;
 
             UtteranceCompleted?.Invoke(this, recordedPcm);
 
-            // If no transcription service is registered or audio is too short, complete immediately
-            if (_transcriptionService == null || recordedPcm.Length < 3200)
+            // If initial silence timeout (no speech detected) or audio is too short, complete immediately without wasting 6+ seconds of CPU on Whisper!
+            if (reason == "InitialSilenceTimeout" || _transcriptionService == null || recordedPcm.Length < 3200)
             {
+                OrbitLogger.Info(LogCategory, $"Skipping Whisper transcription (initial silence timeout or short buffer: reason='{reason}', bytes={recordedPcm.Length}).");
                 CurrentState = VoiceSessionState.Completed;
                 CurrentState = VoiceSessionState.Idle;
                 return;
@@ -236,7 +237,7 @@ public sealed class VoiceSessionManager : IVoiceSessionManager
     private void OnVadUtteranceCompleted(object? sender, string reason)
     {
         OrbitLogger.Info(LogCategory, $"VAD signaled completion ({reason}). Finalizing session.");
-        StopSession();
+        StopSession(reason);
     }
 
     public void Dispose()

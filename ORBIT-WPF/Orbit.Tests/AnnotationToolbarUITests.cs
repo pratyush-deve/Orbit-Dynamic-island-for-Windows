@@ -549,8 +549,16 @@ public class AnnotationToolbarUITests
             Assert.True(window.IsAnnotationModeActive);
 
             var task = window.CaptureAnnotationScreenshotAsync();
-            task.Wait();
-            string? filePath = task.Result;
+            while (!task.IsCompleted)
+            {
+                var frame = new System.Windows.Threading.DispatcherFrame();
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                    System.Windows.Threading.DispatcherPriority.Background,
+                    new Action(() => frame.Continue = false));
+                System.Windows.Threading.Dispatcher.PushFrame(frame);
+                Thread.Sleep(10);
+            }
+            string? filePath = task.GetAwaiter().GetResult();
 
             Assert.NotNull(filePath);
             Assert.True(System.IO.File.Exists(filePath));

@@ -74,7 +74,7 @@
                 <PathGeometry Figures="M 0,0 L 18,0 C 25,0 33,7 36,14 C 39,21 46,30 54,30 L 106,30 C 114,30 121,21 124,14 C 127,7 135,0 142,0 L 160,0 Z"/>
             </Canvas.Clip>
             <Canvas.Effect>
-                <DropShadowEffect Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.35"/>
+                <DropShadowEffect x:Name="BinaryStreamGlow" Color="#A855F7" BlurRadius="4" ShadowDepth="0" Opacity="0.35"/>
             </Canvas.Effect>
 
                 <!-- Left Column 1 (Outer Left) -->
@@ -273,7 +273,7 @@
 
             <!-- 4. Quick Actions Bar (File Dock, Voice Assistant, Annotation, Full Expand) -->
             <Grid x:Name="QuickActionsBar"
-                  Width="310" Height="44"
+                  Width="310" Height="48"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Top"
                   Panel.ZIndex="10"
@@ -289,7 +289,7 @@
                             Orientation="Horizontal"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            Margin="0,0,0,8">
+                            Margin="0,0,0,6">
                     <!-- 1. File Dock (Folder Icon) -->
                     <Button x:Name="BtnQuickFileDock"
                             Width="36" Height="26"
@@ -344,8 +344,7 @@
                             Cursor="Hand"
                             ToolTip="Voice Assistant"
                             Focusable="False"
-                            Click="OnVoiceAssistantButtonClicked"
-                            PreviewMouseLeftButtonDown="OnVoiceAssistantButtonPreviewMouseDown">
+                            Click="OnVoiceAssistantButtonClicked">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border x:Name="Bg"
@@ -481,7 +480,7 @@
                 <Grid x:Name="VoiceModePanel"
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Center"
-                      Margin="56,0,56,8"
+                      Margin="56,0,56,6"
                       Visibility="Collapsed"
                       Opacity="0.0"
                       IsHitTestVisible="False">
@@ -1281,6 +1280,109 @@
                                  Visibility="Collapsed"
                                  CloseRequested="OnFileDockCloseRequested"
                                  PinToggleRequested="OnFileDockPinToggleRequested"/>
+
+            <!-- 4.8 AI Response Bubble (Streams response progressively below the mascot notch) -->
+            <Border x:Name="AiResponseBubble"
+                    Width="380"
+                    Margin="0,42,0,8"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top"
+                    Panel.ZIndex="12"
+                    CornerRadius="12"
+                    BorderThickness="1.2"
+                    BorderBrush="#A855F7"
+                    Background="#160D27"
+                    Padding="14,10"
+                    Opacity="0.0"
+                    Visibility="Collapsed"
+                    MouseEnter="OnAiResponseBubbleMouseEnter"
+                    MouseLeave="OnAiResponseBubbleMouseLeave">
+                <Border.Effect>
+                    <DropShadowEffect x:Name="AiResponseGlow" Color="#A855F7" BlurRadius="18" ShadowDepth="0" Opacity="0.55"/>
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    
+                    <!-- Header with green AI indicator dot and title -->
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Ellipse Width="7" Height="7" Fill="#10B981" Margin="0,0,6,0">
+                                <Ellipse.Effect>
+                                    <DropShadowEffect Color="#10B981" BlurRadius="6" ShadowDepth="0" Opacity="0.9"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+                            <TextBlock Text="ORBIT AI" FontSize="10" FontWeight="Bold" Foreground="#C084FC"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Scrollable Response Text with Sleek Scroll Indicator -->
+                    <Grid Grid.Row="1" Margin="0,2,0,2">
+                        <ScrollViewer x:Name="AiResponseScrollViewer"
+                                      MaxHeight="180"
+                                      VerticalScrollBarVisibility="Hidden"
+                                      HorizontalScrollBarVisibility="Disabled"
+                                      Focusable="False"
+                                      ScrollChanged="OnAiResponseScrollChanged">
+                            <TextBlock x:Name="AiResponseText"
+                                       Text=""
+                                       FontSize="11.5"
+                                       LineHeight="16"
+                                       Foreground="#F3E8FF"
+                                       TextWrapping="Wrap"
+                                       TextTrimming="None"/>
+                        </ScrollViewer>
+
+                        <!-- Minimal Glowing Scroll Indicator (Only visible when scrollable) -->
+                        <Canvas x:Name="AiScrollIndicatorTrack"
+                                Width="4"
+                                HorizontalAlignment="Right"
+                                Margin="0,2,0,2"
+                                Visibility="Collapsed"
+                                IsHitTestVisible="False">
+                            <Border x:Name="AiScrollIndicatorThumb"
+                                    Width="3"
+                                    Height="24"
+                                    CornerRadius="1.5"
+                                    Background="#A855F7"
+                                    Opacity="0.75"/>
+                        </Canvas>
+                    </Grid>
+
+                    <!-- Clarification Action Panel (YES / NO buttons) -->
+                    <StackPanel x:Name="ClarificationActionPanel"
+                                Grid.Row="2"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="0,8,0,0"
+                                Visibility="Collapsed">
+                        <Button x:Name="ClarificationYesButton"
+                                Content="YES"
+                                Width="64" Height="24"
+                                Margin="0,0,8,0"
+                                FontWeight="SemiBold"
+                                FontSize="11"
+                                Foreground="#FFFFFF"
+                                Background="#10B981"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Click="OnClarificationYesClicked"/>
+                        <Button x:Name="ClarificationNoButton"
+                                Content="NO"
+                                Width="64" Height="24"
+                                FontWeight="SemiBold"
+                                FontSize="11"
+                                Foreground="#E2E8F0"
+                                Background="#334155"
+                                BorderThickness="0"
+                                Cursor="Hand"
+                                Click="OnClarificationNoClicked"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
 
             <!-- 5. Mascot Eyes & Mouth (Centered inside the carved notch cradle at all times, foreground) -->
             <Grid x:Name="MascotContainerGrid"

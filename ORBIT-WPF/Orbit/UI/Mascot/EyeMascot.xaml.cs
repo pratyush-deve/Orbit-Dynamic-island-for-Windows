@@ -24,11 +24,16 @@ public partial class EyeMascot : UserControl
     private static readonly System.Windows.Media.Color ColorEyePurple = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A855F7");
     private static readonly System.Windows.Media.Color ColorGlowPurple = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#C084FC");
     private static readonly System.Windows.Media.Color ColorEyeWhite = System.Windows.Media.Colors.White;
+    private static readonly System.Windows.Media.Color ColorAiWorking = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#10B981");
 
     private static readonly System.Windows.Media.SolidColorBrush BrushWorkingBorder = new(ColorWorking);
     private static readonly System.Windows.Media.SolidColorBrush BrushCompletedBorder = new(ColorCompleted);
     private static readonly System.Windows.Media.SolidColorBrush BrushAttentionBorder = new(ColorAttention);
     private static readonly System.Windows.Media.SolidColorBrush BrushWorkingMouth = new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#E9D5FF"));
+    private static readonly System.Windows.Media.SolidColorBrush BrushAiWorkingEye = new(ColorAiWorking);
+    private static readonly System.Windows.Media.SolidColorBrush BrushAiWorkingMouth = new((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#A7F3D0"));
+
+    private bool _isAiGeneratingMode = false;
 
     // Expressions for ORBIT Mascot's tiny expressive mouth
     private static readonly System.Windows.Media.Geometry GeometryMouthIdle = System.Windows.Media.Geometry.Parse("M 0,0 Q 4,2.2 8,0");
@@ -889,6 +894,13 @@ public partial class EyeMascot : UserControl
                 // Reveal focused working eyes
                 if (LeftWorkingEye != null && RightWorkingEye != null)
                 {
+                    var workingBrush = _isAiGeneratingMode ? BrushAiWorkingEye : BrushWorkingBorder;
+                    var workingGlowColor = _isAiGeneratingMode ? ColorAiWorking : ColorWorking;
+                    LeftWorkingEye.Fill = workingBrush;
+                    RightWorkingEye.Fill = workingBrush;
+                    if (LeftWorkingGlow != null) LeftWorkingGlow.Color = workingGlowColor;
+                    if (RightWorkingGlow != null) RightWorkingGlow.Color = workingGlowColor;
+
                     var workingFadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(180)) { EasingFunction = fadeEase };
                     LeftWorkingEye.BeginAnimation(OpacityProperty, workingFadeIn);
                     RightWorkingEye.BeginAnimation(OpacityProperty, workingFadeIn);
@@ -908,7 +920,7 @@ public partial class EyeMascot : UserControl
                 }
 
                 // Concentrated flat horizontal mouth stroke
-                if (MouthPath != null) MouthPath.Stroke = BrushWorkingMouth;
+                if (MouthPath != null) MouthPath.Stroke = _isAiGeneratingMode ? BrushAiWorkingMouth : BrushWorkingMouth;
                 break;
             }
 
@@ -1024,5 +1036,50 @@ public partial class EyeMascot : UserControl
 
         // Reset any mouth uplift animation
         MouthTransform?.BeginAnimation(System.Windows.Media.TranslateTransform.YProperty, null);
+
+        if (_isAiGeneratingMode)
+        {
+            ResetAiWorkingEyeColors();
+        }
+    }
+
+    /// <summary>
+    /// Activates or deactivates the dedicated AI generation visual state,
+    /// recoloring the existing focused Working-state eyes and mouth to emerald green.
+    /// </summary>
+    public void SetAiGenerating(bool isGenerating)
+    {
+        _isAiGeneratingMode = isGenerating;
+        if (isGenerating)
+        {
+            SetAiState(Orbit.Models.AgentState.Working, "AI Thinking");
+        }
+        else
+        {
+            ResetAiWorkingEyeColors();
+        }
+    }
+
+    private void ResetAiWorkingEyeColors()
+    {
+        _isAiGeneratingMode = false;
+        if (LeftWorkingEye != null) LeftWorkingEye.Fill = BrushWorkingBorder;
+        if (RightWorkingEye != null) RightWorkingEye.Fill = BrushWorkingBorder;
+        if (LeftWorkingGlow != null) LeftWorkingGlow.Color = ColorWorking;
+        if (RightWorkingGlow != null) RightWorkingGlow.Color = ColorWorking;
+        if (MouthPath != null) MouthPath.Stroke = BrushWorkingMouth;
+    }
+
+    /// <summary>
+    /// Forcibly resets the mascot back to its default Idle state,
+    /// cancelling any active Done/Completed hold and restoring normal white eyes.
+    /// </summary>
+    public void ResetToIdle(bool immediate = false)
+    {
+        CancelDoneHold();
+        _isAiGeneratingMode = false;
+        ResetAiWorkingEyeColors();
+        ApplyVisualState(Orbit.Models.AgentState.Idle);
+        RestoreNormalEyes(immediate ? TimeSpan.Zero : TimeSpan.FromMilliseconds(200));
     }
 }

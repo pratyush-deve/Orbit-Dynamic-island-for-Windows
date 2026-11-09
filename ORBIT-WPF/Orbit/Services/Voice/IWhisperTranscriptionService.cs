@@ -15,6 +15,11 @@ public interface IWhisperTranscriptionService : IDisposable
     bool IsModelLoaded { get; }
 
     /// <summary>
+    /// Gets the filename of the currently loaded Whisper GGML model (e.g. "ggml-small.en.bin").
+    /// </summary>
+    string LoadedModelName { get; }
+
+    /// <summary>
     /// Preloads and initializes the Whisper factory and processor asynchronously if not already loaded.
     /// </summary>
     Task InitializeAsync(CancellationToken cancellationToken = default);

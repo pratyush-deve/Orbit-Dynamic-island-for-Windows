@@ -20,6 +20,7 @@ using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.Services.SystemMonitor;
 using Orbit.Services.Voice;
+using Orbit.Services.Ai;
 using DragEventArgs = System.Windows.DragEventArgs;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DataObject = System.Windows.DataObject;
@@ -50,7 +51,7 @@ public partial class MainWindow : Window
     public const double CollapsedWidth = 160.0;
     public const double CollapsedHeight = 38.0;
     public const double QuickActionsWidth = 310.0;
-    public const double QuickActionsHeight = 44.0;
+    public const double QuickActionsHeight = 48.0;
     public const double AnnotationToolbarWidth = 420.0;
     public const double TuckedToolbarWidth = 72.0;
     public const double FileDockTotalHeight = 150.0;
@@ -81,6 +82,23 @@ public partial class MainWindow : Window
     private readonly IVoiceSessionManager _voiceSessionManager;
     private readonly ICommandParser? _commandParser;
     private readonly IVoiceCommandExecutor? _commandExecutor;
+    private readonly IAiAssistantService? _aiAssistantService;
+
+    // AI Response Bubble & Generation state management
+    public const double AiResponseBubbleWidth = 380.0;
+    private bool _isAiGenerating = false;
+    private bool _isAiResponseBubbleOpen = false;
+    private bool _isClarificationActive = false;
+    private DispatcherTimer? _aiDismissTimer;
+    private DateTime _aiDismissTargetUtc;
+    private int _aiDismissRemainingMs = 6000;
+    public bool IsAiGenerating => _isAiGenerating;
+    public bool IsAiResponseBubbleOpen => _isAiResponseBubbleOpen;
+
+    // Smooth Typewriter delivery for AI bubble text
+    private readonly DispatcherTimer _typewriterTimer = new(DispatcherPriority.Render);
+    private readonly Queue<char> _typewriterQueue = new();
+    private bool _typewriterCompleted = false;
 
     private IntPtr _hwnd = IntPtr.Zero;
     private Orbit.Models.AgentState _currentAgentState = Orbit.Models.AgentState.Idle;
@@ -210,7 +228,8 @@ public partial class MainWindow : Window
         IFileDockService? fileDockService = null,
         IVoiceSessionManager? voiceSessionManager = null,
         ICommandParser? commandParser = null,
-        IVoiceCommandExecutor? commandExecutor = null)
+        IVoiceCommandExecutor? commandExecutor = null,
+        IAiAssistantService? aiAssistantService = null)
     {
         InitializeComponent();
 
@@ -233,6 +252,18 @@ public partial class MainWindow : Window
         _voiceSessionManager = voiceSessionManager ?? new VoiceSessionManager(new WasapiAudioCaptureService());
         _commandParser = commandParser;
         _commandExecutor = commandExecutor;
+        _aiAssistantService = aiAssistantService;
+
+        // Wire AI Assistant events
+        if (_aiAssistantService != null)
+        {
+            _aiAssistantService.GenerationStarted += () => Dispatcher.BeginInvoke(OnAiGenerationStarted);
+            _aiAssistantService.TokenReceived += chunk => Dispatcher.BeginInvoke(() => OnAiTokenReceived(chunk));
+            _aiAssistantService.GenerationCompleted += full => Dispatcher.BeginInvoke(() => OnAiGenerationCompleted(full));
+            _aiAssistantService.GenerationFailed += err => Dispatcher.BeginInvoke(() => OnAiGenerationFailed(err));
+            _aiAssistantService.ClarificationRequested += intent => Dispatcher.BeginInvoke(() => OnAiClarificationRequested(intent));
+            _aiAssistantService.ClarificationDismissed += () => Dispatcher.BeginInvoke(OnAiClarificationDismissed);
+        }
 
         // Wire voice session events
         _voiceSessionManager.AudioLevelUpdated += OnVoiceAudioLevelUpdated;
@@ -246,6 +277,10 @@ public partial class MainWindow : Window
             Interval = TimeSpan.FromSeconds(HoverActivationSeconds)
         };
         _hoverTimer.Tick += OnHoverTimerTick;
+
+        // Initialize fluid typewriter timer for silky smooth text delivery
+        _typewriterTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _typewriterTimer.Tick += OnTypewriterTick;
 
         // Initialize graceful collapse delay timer
         _collapseDelayTimer = new DispatcherTimer
@@ -432,6 +467,10 @@ public partial class MainWindow : Window
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         var duration = TimeSpan.FromMilliseconds(240);
 
+        if (double.IsNaN(Left)) Left = targetLeft;
+        if (double.IsNaN(Width)) Width = targetWidth;
+        if (double.IsNaN(Height)) Height = targetHeight;
+
         var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
         var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
         var heightAnim = new DoubleAnimation(targetHeight, duration) { EasingFunction = ease };
@@ -459,57 +498,23 @@ public partial class MainWindow : Window
     {
         OrbitLogger.Debug(LogCategory, $"Window deactivated. CurrentState = {_lifecycleService.CurrentState}");
 
-        if (_isFileDockOpen)
-        {
-            // If there are zero files, no need to pin the file dock, it can collapse when focus is lost!
-            if (_fileDockService.Items.Count == 0)
-            {
-                OrbitLogger.Info(LogCategory, "File Dock has 0 files and lost focus. Collapsing to idle.");
-                CloseFileDock(toQuickActions: false);
-                return;
-            }
+        // Reapply topmost so ORBIT stays pinned to the top of the screen even when the user clicks into other applications
+        _overlayService.ReapplyTopmost(_hwnd);
 
-            if (_fileDockService.CurrentMode == FileDockMode.Pinned)
-            {
-                // Pinned mode with files remains open while switching apps or dragging files elsewhere
-                _overlayService.ReapplyTopmost(_hwnd);
-                return;
-            }
-            if (_fileDockService.CurrentMode == FileDockMode.Temporary)
-            {
-                if (FileDockPanel != null && FileDockPanel.IsDraggingOut)
-                {
-                    _overlayService.ReapplyTopmost(_hwnd);
-                    return;
-                }
-                CloseFileDock(toQuickActions: false);
-                return;
-            }
-        }
-
-        // CRITICAL: Do NOT collapse or exit if Voice Mode or Annotation Mode is actively open!
-        if (_isVoiceModeActive || _isAnnotationModeActive)
+        // The topbar, AI response bubble, QuickActions, Voice mode, Annotation mode, and FileDock remain ACTIVE
+        // even when focus moves to another window (e.g. IDE, browser, terminal).
+        // Clicking outside ORBIT must NOT dismiss or collapse the topbar.
+        if (_isAiGenerating || _isAiResponseBubbleOpen || _isVoiceModeActive || _isAnnotationModeActive || _isQuickActionsOpen || _isFileDockOpen)
         {
-            _overlayService.ReapplyTopmost(_hwnd);
             return;
         }
 
-        if (_isQuickActionsOpen && !_isTransitioningToFullExpand)
-        {
-            ExecuteHoverCollapse();
-            return;
-        }
-
-        // CRITICAL: Do NOT collapse or exit if Notes mode is active!
         if (IslandPanel.IsNotesModeActive)
         {
-            _overlayService.ReapplyTopmost(_hwnd);
             return;
         }
 
-        // Only collapse if currently EXPANDED
-        // Do NOT collapse if Expanding, Collapsing, Collapsed, or Hidden!
-        // Prevents activation changes during expansion from collapsing prematurely.
+        // Only collapse full dashboard modal if explicitly in Expanded state
         if (_lifecycleService.CurrentState == CompanionState.Expanded)
         {
             IslandPanel.ResetToHomeView();
@@ -895,7 +900,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isVoiceModeActive || _isAnnotationModeActive || _isFileDockOpen)
+        if (_isQuickActionsOpen || _isHoverExpanding || _isHoverCollapsing || _isTransitioningToFullExpand || _isVoiceModeActive || _isAnnotationModeActive || _isFileDockOpen || _isAiGenerating || _isAiResponseBubbleOpen)
         {
             return;
         }
@@ -908,6 +913,20 @@ public partial class MainWindow : Window
     {
         if (e.ChangedButton == MouseButton.Left)
         {
+            // Lock mascot interactions during active AI generation
+            if (_isAiGenerating)
+            {
+                OrbitLogger.Debug(LogCategory, "Mascot click locked during AI generation.");
+                return;
+            }
+
+            // If response bubble is open after generation, clicking mascot dismisses it immediately
+            if (_isAiResponseBubbleOpen)
+            {
+                DismissAiResponseBubble();
+                return;
+            }
+
             if (_isFileDockOpen)
             {
                 OrbitLogger.Info(LogCategory, "Mascot clicked while File Dock open. Closing dock and returning to normal ORBIT.");
@@ -941,6 +960,9 @@ public partial class MainWindow : Window
 
     private void StartHoverTimer()
     {
+        // Suppress hover actions during AI generation or when AI Response Bubble is displayed
+        if (_isAiGenerating || _isAiResponseBubbleOpen) return;
+
         // Allow hover quick actions ONLY in Idle state (ignore working, done, error, attention, etc.)
         if (_currentAgentState != Orbit.Models.AgentState.Idle || PillMascot.IsHoldingDoneState)
         {
@@ -1135,6 +1157,7 @@ public partial class MainWindow : Window
 
     private void ScheduleHoverCollapse()
     {
+        if (_isAiGenerating || _isAiResponseBubbleOpen) return;
         if (!_isQuickActionsOpen || _isTransitioningToFullExpand || _isHoverCollapsing) return;
 
         _collapseDelayTimer.Stop();
@@ -1191,6 +1214,7 @@ public partial class MainWindow : Window
     private void ExecuteHoverCollapse()
     {
         CancelCollapseDelay();
+        if (_isAiGenerating || _isAiResponseBubbleOpen) return;
         if (_isTransitioningToFullExpand || _isHoverCollapsing || !_isQuickActionsOpen) return;
 
         // CRITICAL: While Voice Mode or Annotation Mode is active, do not collapse
@@ -1379,6 +1403,10 @@ public partial class MainWindow : Window
         {
             var primary = _monitorService.GetPrimaryMonitor();
             var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+            if (double.IsNaN(Left)) Left = targetLeft;
+            if (double.IsNaN(Width)) Width = CollapsedWidth;
+            if (double.IsNaN(Height)) Height = CollapsedHeight;
 
             QuickActionsBar.IsHitTestVisible = false;
             var actionsFadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
@@ -1702,7 +1730,13 @@ public partial class MainWindow : Window
     /// </summary>
     public void EnterVoiceMode()
     {
-        if (_isVoiceModeActive || _isHoverCollapsing || _isTransitioningToFullExpand) return;
+        if (_isVoiceModeActive || _isTransitioningToFullExpand) return;
+
+        // Cancel any pending collapse delay or in-flight hover collapse immediately
+        CancelHoverTimer();
+        CancelCollapseDelay();
+        _isHoverCollapsing = false;
+        _isQuickActionsOpen = true;
 
         // If File Dock is open, close it cleanly first
         if (_isFileDockOpen)
@@ -1711,50 +1745,48 @@ public partial class MainWindow : Window
         }
 
         _isVoiceModeActive = true;
-        CancelCollapseDelay();
 
-        // 1. Smoothly fade out standard quick action buttons
-        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(120));
+        // 1. Immediately start audio capture session (0ms hardware lag!)
+        bool started = _voiceSessionManager.StartSession();
+        if (!started)
+        {
+            OrbitLogger.Warn(LogCategory, "Could not start voice session (hardware unavailable or access denied).");
+        }
+
+        // 2. Reveal VoiceModePanel with animated waveform immediately
+        VoiceModePanel.Visibility = Visibility.Visible;
+        VoiceModePanel.IsHitTestVisible = true;
+        _voiceResultTimer?.Stop();
+        StopProcessingAnimation();
+
+        if (VoiceProcessingPanel != null)
+        {
+            VoiceProcessingPanel.Visibility = Visibility.Collapsed;
+            VoiceProcessingPanel.Opacity = 0.0;
+        }
+        if (VoiceResultText != null)
+        {
+            VoiceResultText.BeginAnimation(OpacityProperty, null);
+            VoiceResultText.Visibility = Visibility.Collapsed;
+            VoiceResultText.Opacity = 0.0;
+            VoiceResultText.Text = string.Empty;
+        }
+
+        VoiceWaveform.Visibility = Visibility.Visible;
+        VoiceWaveform.Opacity = 1.0;
+        VoiceWaveform.StartRendering();
+
+        // 3. Smoothly cross-fade buttons and voice panel
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(100));
         fadeOut.Completed += (s, e) =>
         {
             StandardQuickActionsPanel.Visibility = Visibility.Collapsed;
             StandardQuickActionsPanel.IsHitTestVisible = false;
-
-            // 2. Reveal VoiceModePanel with animated waveform
-            VoiceModePanel.Visibility = Visibility.Visible;
-            VoiceModePanel.IsHitTestVisible = true;
-            _voiceResultTimer?.Stop();
-            StopProcessingAnimation();
-
-            if (VoiceProcessingPanel != null)
-            {
-                VoiceProcessingPanel.Visibility = Visibility.Collapsed;
-                VoiceProcessingPanel.Opacity = 0.0;
-            }
-            if (VoiceResultText != null)
-            {
-                VoiceResultText.BeginAnimation(OpacityProperty, null);
-                VoiceResultText.Visibility = Visibility.Collapsed;
-                VoiceResultText.Opacity = 0.0;
-                VoiceResultText.Text = string.Empty;
-            }
-
-            VoiceWaveform.Visibility = Visibility.Visible;
-            VoiceWaveform.Opacity = 1.0;
-            VoiceWaveform.StartRendering();
-
-            var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140));
-            VoiceModePanel.BeginAnimation(OpacityProperty, fadeIn);
-
-            // 3. Start audio capture session
-            bool started = _voiceSessionManager.StartSession();
-            if (!started)
-            {
-                OrbitLogger.Warn(LogCategory, "Could not start voice session (hardware unavailable or access denied).");
-            }
         };
-
         StandardQuickActionsPanel.BeginAnimation(OpacityProperty, fadeOut);
+
+        var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(100));
+        VoiceModePanel.BeginAnimation(OpacityProperty, fadeIn);
     }
 
     /// <summary>
@@ -1814,11 +1846,15 @@ public partial class MainWindow : Window
         {
             var primary = _monitorService.GetPrimaryMonitor();
             var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
             BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
             BeginAnimation(LeftProperty, null);
             Width = CollapsedWidth;
+            Height = CollapsedHeight;
             Left = targetLeft;
             Top = topY;
+            UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
 
             QuickActionsBar.BeginAnimation(OpacityProperty, null);
             QuickActionsBar.Visibility = Visibility.Collapsed;
@@ -1848,6 +1884,10 @@ public partial class MainWindow : Window
 
             var primary = _monitorService.GetPrimaryMonitor();
             var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+            if (double.IsNaN(Left)) Left = targetLeft;
+            if (double.IsNaN(Width)) Width = CollapsedWidth;
+            if (double.IsNaN(Height)) Height = CollapsedHeight;
 
             // Hide quick actions & voice panel together
             QuickActionsBar.IsHitTestVisible = false;
@@ -2037,6 +2077,90 @@ public partial class MainWindow : Window
 
             StopProcessingAnimation();
 
+            // When AI assistant is enabled, never display raw Whisper text in the UI
+            if (_aiAssistantService != null)
+            {
+                ExitVoiceMode(cancelCapture: false, returnToMascot: true, immediate: true);
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    OrbitLogger.Info(LogCategory, "Voice transcription was empty or silent.");
+                    PillMascot.SetAiState(Orbit.Models.AgentState.Idle);
+                    return;
+                }
+
+                // Check pending clarification voice response
+                if (_aiAssistantService.PendingClarification != null)
+                {
+                    string cleanSpoken = text.Trim().ToLowerInvariant();
+                    // 1. Clear affirmative
+                    if (cleanSpoken == "yes" || cleanSpoken == "yeah" || cleanSpoken == "yep" || cleanSpoken == "correct" || cleanSpoken == "sure")
+                    {
+                        OrbitLogger.Info(LogCategory, $"User confirmed clarification via voice: '{text}'");
+                        _isClarificationActive = false;
+                        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+                        _ = Task.Run(async () =>
+                        {
+                            var result = await _aiAssistantService.ConfirmClarificationAsync().ConfigureAwait(false);
+                            if (result != null)
+                            {
+                                _ = Dispatcher.BeginInvoke(() =>
+                                {
+                                    AiResponseText.Text = result.Message;
+                                    StartAiDismissTimer(3500);
+                                });
+                            }
+                        });
+                        return;
+                    }
+
+                    // 2. Clear negative with correction (e.g. "no, open chrome instead", "actually open visual studio code")
+                    var matchCorrection = System.Text.RegularExpressions.Regex.Match(text, @"^(?:no[, ]*|nope[, ]*|nah[, ]*|actually[, ]*)(?:i\s+meant\s+)?(.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (matchCorrection.Success && !string.IsNullOrWhiteSpace(matchCorrection.Groups[1].Value) &&
+                        !cleanSpoken.Equals("no", StringComparison.OrdinalIgnoreCase) &&
+                        !cleanSpoken.Equals("nope", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string corrected = matchCorrection.Groups[1].Value.Trim();
+                        OrbitLogger.Info(LogCategory, $"User corrected clarification via voice: '{text}' -> '{corrected}'");
+                        _isClarificationActive = false;
+                        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+                        _aiAssistantService.RejectClarification();
+
+                        _ = Task.Run(async () =>
+                        {
+                            await _aiAssistantService.ProcessVoiceTranscriptionAsync(corrected).ConfigureAwait(false);
+                        });
+                        return;
+                    }
+
+                    // 3. Pure negative (e.g. "no", "nope", "cancel")
+                    if (cleanSpoken == "no" || cleanSpoken == "nope" || cleanSpoken == "cancel")
+                    {
+                        OrbitLogger.Info(LogCategory, $"User rejected clarification via voice: '{text}'. Re-activating listening.");
+                        _isClarificationActive = false;
+                        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+                        _aiAssistantService.RejectClarification();
+                        DismissAiResponseBubble();
+                        EnterVoiceMode();
+                        return;
+                    }
+                }
+
+                OrbitLogger.Info(LogCategory, $"Routing voice transcription internally to AI engine: '{text}'");
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _aiAssistantService.ProcessVoiceTranscriptionAsync(text).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        OrbitLogger.Error(LogCategory, $"Failed processing voice transcription via AI: {ex.Message}", ex);
+                    }
+                });
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(text))
             {
                 OrbitLogger.Info(LogCategory, "Voice transcription was empty. Displaying 'Didn't catch that' feedback.");
@@ -2132,6 +2256,471 @@ public partial class MainWindow : Window
             };
             _voiceResultTimer.Start();
         });
+    }
+
+    #endregion
+
+    #region AI Assistant & Response Bubble Management
+
+    private void OnAiGenerationStarted()
+    {
+        _isAiGenerating = true;
+        _isAiResponseBubbleOpen = false;
+        _typewriterCompleted = false;
+        _typewriterTimer.Stop();
+        _typewriterQueue.Clear();
+
+        // Lock window dimensions strictly to the compact 160x38 pill while Qwen is thinking
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+        BeginAnimation(WidthProperty, null);
+        BeginAnimation(HeightProperty, null);
+        BeginAnimation(LeftProperty, null);
+        Width = CollapsedWidth;
+        Height = CollapsedHeight;
+        Left = targetLeft;
+        Top = topY;
+        UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+        // Recolor mascot and binary stream to green (#10B981)
+        PillMascot.SetAiGenerating(true);
+        SetBinaryStreamAiColor(true);
+        StartBinaryStreamAnimation();
+
+        // Update notch outline & shelf to green
+        if (CollapsedNotchOutline != null) CollapsedNotchOutline.Stroke = BrushGreenNotchOutline;
+        if (MascotNotchBoundaryIndicator != null) MascotNotchBoundaryIndicator.Stroke = BrushGreenNotchShelf;
+
+        // Reset bubble text without opening dialog yet
+        AiResponseText.Text = string.Empty;
+        AiResponseBubble.Visibility = Visibility.Collapsed;
+        AiResponseBubble.Opacity = 0.0;
+        AiResponseBubble.IsHitTestVisible = false;
+        if (AiScrollIndicatorTrack != null) AiScrollIndicatorTrack.Visibility = Visibility.Collapsed;
+    }
+
+    private void EnsureAiResponseBubbleOpen()
+    {
+        if (_isAiResponseBubbleOpen) return;
+
+        _isAiResponseBubbleOpen = true;
+        AiResponseBubble.Visibility = Visibility.Visible;
+        AiResponseBubble.Opacity = 0.0;
+        AiResponseBubble.IsHitTestVisible = true;
+
+        var fadeIn = new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(160));
+        AiResponseBubble.BeginAnimation(OpacityProperty, fadeIn);
+
+        AnimateAiWindowDimensions(targetWidth: 400.0, targetHeight: 140.0);
+    }
+
+    private void OnAiTokenReceived(string chunk)
+    {
+        if (!_isAiGenerating) return;
+
+        EnsureAiResponseBubbleOpen();
+
+        foreach (char c in chunk)
+        {
+            _typewriterQueue.Enqueue(c);
+        }
+
+        if (!_typewriterTimer.IsEnabled)
+        {
+            _typewriterTimer.Start();
+        }
+    }
+
+    private void OnTypewriterTick(object? sender, EventArgs e)
+    {
+        if (_typewriterQueue.Count > 0)
+        {
+            // Adaptive typewriter cadence: 1 to 4 chars per 16ms tick
+            int charsToDrain = _typewriterQueue.Count > 60 ? 4 : (_typewriterQueue.Count > 20 ? 2 : 1);
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < charsToDrain && _typewriterQueue.Count > 0; i++)
+            {
+                sb.Append(_typewriterQueue.Dequeue());
+            }
+
+            AiResponseText.Text += sb.ToString();
+            AiResponseScrollViewer.ScrollToEnd();
+
+            // Dynamically adjust window height smoothly
+            AiResponseBubble.UpdateLayout();
+            double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+            if (desiredHeight > Height + 6.0)
+            {
+                Height = desiredHeight;
+                UpdateUnifiedIslandGeometry(Width, Height);
+            }
+        }
+        else if (_typewriterCompleted)
+        {
+            _typewriterTimer.Stop();
+            StartAiDismissTimer();
+        }
+    }
+
+    private void FlushTypewriterQueue()
+    {
+        if (_typewriterQueue.Count > 0)
+        {
+            var sb = new System.Text.StringBuilder();
+            while (_typewriterQueue.Count > 0)
+            {
+                sb.Append(_typewriterQueue.Dequeue());
+            }
+            AiResponseText.Text += sb.ToString();
+            AiResponseScrollViewer.ScrollToEnd();
+        }
+        _typewriterTimer.Stop();
+    }
+
+    private void OnAiResponseScrollChanged(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
+    {
+        if (AiResponseScrollViewer == null || AiScrollIndicatorTrack == null || AiScrollIndicatorThumb == null) return;
+
+        double extent = AiResponseScrollViewer.ExtentHeight;
+        double viewport = AiResponseScrollViewer.ViewportHeight;
+        double offset = AiResponseScrollViewer.VerticalOffset;
+
+        if (extent > viewport && viewport > 0)
+        {
+            AiScrollIndicatorTrack.Visibility = Visibility.Visible;
+            double trackHeight = Math.Max(20.0, AiResponseScrollViewer.ActualHeight - 6.0);
+            double thumbHeight = Math.Max(18.0, Math.Min(trackHeight, (viewport / extent) * trackHeight));
+            AiScrollIndicatorThumb.Height = thumbHeight;
+
+            double scrollable = extent - viewport;
+            double thumbTravel = trackHeight - thumbHeight;
+            double top = scrollable > 0 ? (offset / scrollable) * thumbTravel : 0;
+            System.Windows.Controls.Canvas.SetTop(AiScrollIndicatorThumb, top);
+        }
+        else
+        {
+            AiScrollIndicatorTrack.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void OnAiGenerationCompleted(string fullResponse)
+    {
+        _isAiGenerating = false;
+        StopBinaryStreamAnimation();
+        SetBinaryStreamAiColor(false);
+
+        // Ensure bubble is open
+        EnsureAiResponseBubbleOpen();
+
+        // If no tokens were streamed before completion, enqueue full response to type out
+        if (string.IsNullOrWhiteSpace(AiResponseText.Text) && _typewriterQueue.Count == 0 && !string.IsNullOrWhiteSpace(fullResponse))
+        {
+            foreach (char c in fullResponse)
+            {
+                _typewriterQueue.Enqueue(c);
+            }
+            if (!_typewriterTimer.IsEnabled)
+            {
+                _typewriterTimer.Start();
+            }
+        }
+
+        _typewriterCompleted = true;
+
+        // Transition mascot to Completed state (emerald green #10B981, smiling eye arches ◠ ◠)
+        PillMascot.SetAiGenerating(false);
+        PillMascot.SetAiState(Orbit.Models.AgentState.Completed, "Complete");
+
+        AiResponseScrollViewer.ScrollToEnd();
+        AiResponseBubble.UpdateLayout();
+        double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+        Height = desiredHeight;
+        UpdateUnifiedIslandGeometry(Width, Height);
+
+        if (_typewriterQueue.Count == 0)
+        {
+            StartAiDismissTimer();
+        }
+    }
+
+    private void OnAiGenerationFailed(string error)
+    {
+        _isAiGenerating = false;
+        _typewriterCompleted = true;
+        _typewriterTimer.Stop();
+        _typewriterQueue.Clear();
+
+        StopBinaryStreamAnimation();
+        SetBinaryStreamAiColor(false);
+
+        PillMascot.SetAiGenerating(false);
+        PillMascot.SetAiState(Orbit.Models.AgentState.Error, "AI Error");
+
+        // Open bubble to show error message
+        EnsureAiResponseBubbleOpen();
+
+        AiResponseText.Text = string.IsNullOrWhiteSpace(error)
+            ? "Local AI engine is unavailable. Ensure Ollama is running."
+            : error;
+
+        AiResponseBubble.UpdateLayout();
+        double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+        Height = desiredHeight;
+        UpdateUnifiedIslandGeometry(Width, Height);
+
+        StartAiDismissTimer();
+    }
+
+    private void OnAiClarificationRequested(CommandIntent intent)
+    {
+        _isClarificationActive = true;
+        _aiDismissTimer?.Stop();
+
+        EnsureAiResponseBubbleOpen();
+        FlushTypewriterQueue();
+
+        string promptText = intent.ClarificationPrompt ?? $"Did you mean {intent.Target}?";
+        AiResponseText.Text = promptText;
+        ClarificationActionPanel.Visibility = Visibility.Visible;
+
+        PillMascot.SetAiGenerating(false);
+        PillMascot.SetAiState(Orbit.Models.AgentState.Attention, "Clarifying");
+
+        AiResponseBubble.UpdateLayout();
+        double desiredHeight = Math.Min(260.0, Math.Max(140.0, AiResponseBubble.ActualHeight + 52.0));
+        Height = desiredHeight;
+        UpdateUnifiedIslandGeometry(Width, Height);
+
+        AnimateAiWindowDimensions(targetWidth: 400.0, targetHeight: 160.0);
+    }
+
+    private void OnAiClarificationDismissed()
+    {
+        _isClarificationActive = false;
+        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+    }
+
+    private async void OnClarificationYesClicked(object sender, RoutedEventArgs e)
+    {
+        if (_aiAssistantService == null) return;
+        _isClarificationActive = false;
+        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+
+        var result = await _aiAssistantService.ConfirmClarificationAsync();
+        if (result != null)
+        {
+            AiResponseText.Text = result.Message;
+            StartAiDismissTimer(3500);
+        }
+        else
+        {
+            DismissAiResponseBubble();
+        }
+    }
+
+    private void OnClarificationNoClicked(object sender, RoutedEventArgs e)
+    {
+        if (_aiAssistantService == null) return;
+        _isClarificationActive = false;
+        ClarificationActionPanel.Visibility = Visibility.Collapsed;
+        _aiAssistantService.RejectClarification();
+
+        // Immediately reactivate microphone / listening mode for clean correction
+        DismissAiResponseBubble();
+        EnterVoiceMode();
+    }
+
+    private void StartAiDismissTimer(int durationMs = 6000)
+    {
+        if (_isClarificationActive) return;
+
+        _aiDismissTimer?.Stop();
+        _aiDismissRemainingMs = durationMs;
+        _aiDismissTargetUtc = DateTime.UtcNow.AddMilliseconds(durationMs);
+
+        _aiDismissTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(durationMs)
+        };
+        _aiDismissTimer.Tick += (s, e) =>
+        {
+            _aiDismissTimer.Stop();
+            DismissAiResponseBubble();
+        };
+        _aiDismissTimer.Start();
+    }
+
+    private void OnAiResponseBubbleMouseEnter(object sender, MouseEventArgs e)
+    {
+        FlushTypewriterQueue();
+        if (_aiDismissTimer != null && _aiDismissTimer.IsEnabled)
+        {
+            _aiDismissTimer.Stop();
+            var remaining = (_aiDismissTargetUtc - DateTime.UtcNow).TotalMilliseconds;
+            _aiDismissRemainingMs = Math.Max(1000, (int)remaining);
+        }
+    }
+
+    private void OnAiResponseBubbleMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!_isAiGenerating && _isAiResponseBubbleOpen && !_isClarificationActive)
+        {
+            StartAiDismissTimer(_aiDismissRemainingMs);
+        }
+    }
+
+    public void DismissAiResponseBubble()
+    {
+        _aiDismissTimer?.Stop();
+        _isClarificationActive = false;
+        if (ClarificationActionPanel != null) ClarificationActionPanel.Visibility = Visibility.Collapsed;
+
+        _isAiResponseBubbleOpen = false;
+        _isAiGenerating = false;
+        _typewriterTimer.Stop();
+        _typewriterQueue.Clear();
+
+        // 1. Fade out the AI bubble immediately
+        var fadeOut = new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(120));
+        fadeOut.Completed += (s, e) =>
+        {
+            AiResponseBubble.Visibility = Visibility.Collapsed;
+        };
+        AiResponseBubble.BeginAnimation(OpacityProperty, fadeOut);
+
+        // 2. Animate the main island dimensions smoothly back down to collapsed notch size
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
+
+        // If window is already at collapsed dimensions or not initialized, just reset idle state immediately
+        if (double.IsNaN(Left) || double.IsNaN(Width) || double.IsNaN(Height) ||
+            (Math.Abs(Width - CollapsedWidth) < 1.0 && Math.Abs(Height - CollapsedHeight) < 1.0))
+        {
+            Width = CollapsedWidth;
+            Height = CollapsedHeight;
+            if (!double.IsNaN(targetLeft)) Left = targetLeft;
+            PillMascot.ResetToIdle();
+            UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
+            if (CollapsedNotchOutline != null) CollapsedNotchOutline.Stroke = BrushPurpleNotchOutline;
+            if (MascotNotchBoundaryIndicator != null) MascotNotchBoundaryIndicator.Stroke = BrushPurpleNotchShelf;
+            return;
+        }
+
+        var duration = TimeSpan.FromMilliseconds(180);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        var animW = new DoubleAnimation(CollapsedWidth, duration) { EasingFunction = ease };
+        var animH = new DoubleAnimation(CollapsedHeight, duration) { EasingFunction = ease };
+        var animL = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+        animH.CurrentTimeInvalidated += (s, e) =>
+        {
+            UpdateUnifiedIslandGeometry(Width, Height);
+        };
+
+        animH.Completed += (s, e) =>
+        {
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            Width = CollapsedWidth;
+            Height = CollapsedHeight;
+            Left = targetLeft;
+
+            UpdateUnifiedIslandGeometry(CollapsedWidth, CollapsedHeight);
+
+            PillMascot.ResetToIdle();
+            UpdateCompactNotchGlow(Orbit.Models.AgentState.Idle);
+            if (CollapsedNotchOutline != null) CollapsedNotchOutline.Stroke = BrushPurpleNotchOutline;
+            if (MascotNotchBoundaryIndicator != null) MascotNotchBoundaryIndicator.Stroke = BrushPurpleNotchShelf;
+            _overlayService.ReapplyTopmost(_hwnd);
+        };
+
+        BeginAnimation(WidthProperty, animW);
+        BeginAnimation(HeightProperty, animH);
+        BeginAnimation(LeftProperty, animL);
+    }
+
+    private void AnimateAiWindowDimensions(double targetWidth, double targetHeight)
+    {
+        var primary = _monitorService.GetPrimaryMonitor();
+        var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, targetWidth, TopMargin);
+
+        var duration = TimeSpan.FromMilliseconds(200);
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+        if (double.IsNaN(Left)) Left = targetLeft;
+        if (double.IsNaN(Width)) Width = targetWidth;
+        if (double.IsNaN(Height)) Height = targetHeight;
+
+        var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+        var heightAnim = new DoubleAnimation(targetHeight, duration) { EasingFunction = ease };
+        var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
+
+        heightAnim.Completed += (s, e) =>
+        {
+            Width = targetWidth;
+            Height = targetHeight;
+            Left = targetLeft;
+
+            BeginAnimation(WidthProperty, null);
+            BeginAnimation(HeightProperty, null);
+            BeginAnimation(LeftProperty, null);
+
+            UpdateUnifiedIslandGeometry(targetWidth, targetHeight);
+            _overlayService.ReapplyTopmost(_hwnd);
+        };
+
+        BeginAnimation(WidthProperty, widthAnim);
+        BeginAnimation(HeightProperty, heightAnim);
+        BeginAnimation(LeftProperty, leftAnim);
+    }
+
+    private void SetBinaryStreamAiColor(bool isAiGreen)
+    {
+        if (BinaryStreamGlow != null)
+        {
+            BinaryStreamGlow.Color = isAiGreen
+                ? System.Windows.Media.Color.FromRgb(0x10, 0xB9, 0x81)
+                : System.Windows.Media.Color.FromRgb(0xA8, 0x55, 0xF7);
+        }
+
+        if (BinaryStreamOverlay == null) return;
+
+        var greenBrushes = new[]
+        {
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x10, 0xB9, 0x81)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x05, 0x96, 0x69)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x34, 0xD3, 0x99)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6E, 0xE7, 0xB7)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xA7, 0xF3, 0xD0))
+        };
+        var purpleBrushes = new[]
+        {
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x7C, 0x3A, 0xED)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xA8, 0x55, 0xF7)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xE9, 0xD5, 0xFF)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x6B, 0x46, 0xC1)),
+            new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xC0, 0x84, 0xFC))
+        };
+
+        var palette = isAiGreen ? greenBrushes : purpleBrushes;
+        int idx = 0;
+        foreach (var child in BinaryStreamOverlay.Children)
+        {
+            if (child is System.Windows.Controls.TextBlock tb)
+            {
+                foreach (var inline in tb.Inlines)
+                {
+                    if (inline is System.Windows.Documents.Run run)
+                    {
+                        run.Foreground = palette[idx % palette.Length];
+                        idx++;
+                    }
+                }
+            }
+        }
     }
 
     #endregion
@@ -2421,6 +3010,10 @@ public partial class MainWindow : Window
             var primary = _monitorService.GetPrimaryMonitor();
             var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, CollapsedWidth, TopMargin);
 
+            if (double.IsNaN(Left)) Left = targetLeft;
+            if (double.IsNaN(Width)) Width = CollapsedWidth;
+            if (double.IsNaN(Height)) Height = CollapsedHeight;
+
             var duration = TimeSpan.FromMilliseconds(220);
             var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
@@ -2535,6 +3128,9 @@ public partial class MainWindow : Window
         double targetWidth = tuck ? TuckedToolbarWidth : AnnotationToolbarWidth;
         var (targetLeft, topY) = _monitorService.GetTopCenterPosition(primary, targetWidth, TopMargin);
 
+        if (double.IsNaN(Left)) Left = targetLeft;
+        if (double.IsNaN(Width)) Width = targetWidth;
+
         var duration = TimeSpan.FromMilliseconds(200);
         var ease = new CubicEase { EasingMode = EasingMode.EaseInOut };
 
@@ -2547,7 +3143,11 @@ public partial class MainWindow : Window
             AnnotationToolbarPanel.IsHitTestVisible = false;
 
             // Animate width to tucked width
-            var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+            if (double.IsNaN(Left)) Left = targetLeft;
+            if (double.IsNaN(Width)) Width = targetWidth;
+            if (double.IsNaN(Height)) Height = QuickActionsHeight;
+
+        var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
             var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
             var barWidthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
 
@@ -2588,7 +3188,11 @@ public partial class MainWindow : Window
             }
 
             // Animate width back to full toolbar width
-            var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
+            if (double.IsNaN(Left)) Left = targetLeft;
+            if (double.IsNaN(Width)) Width = targetWidth;
+            if (double.IsNaN(Height)) Height = QuickActionsHeight;
+
+        var widthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
             var leftAnim = new DoubleAnimation(targetLeft, duration) { EasingFunction = ease };
             var barWidthAnim = new DoubleAnimation(targetWidth, duration) { EasingFunction = ease };
 
@@ -2643,13 +3247,21 @@ public partial class MainWindow : Window
             // Determine virtual screen bounds (spans all connected monitors)
             int left = (int)SystemParameters.VirtualScreenLeft;
             int top = (int)SystemParameters.VirtualScreenTop;
-            int width = (int)SystemParameters.VirtualScreenWidth;
-            int height = (int)SystemParameters.VirtualScreenHeight;
+            int width = Math.Max(1, (int)SystemParameters.VirtualScreenWidth);
+            int height = Math.Max(1, (int)SystemParameters.VirtualScreenHeight);
 
             using var bitmap = new System.Drawing.Bitmap(width, height);
             using (var g = System.Drawing.Graphics.FromImage(bitmap))
             {
-                g.CopyFromScreen(left, top, 0, 0, new System.Drawing.Size(width, height), System.Drawing.CopyPixelOperation.SourceCopy);
+                try
+                {
+                    g.CopyFromScreen(left, top, 0, 0, new System.Drawing.Size(width, height), System.Drawing.CopyPixelOperation.SourceCopy);
+                }
+                catch (Exception screenEx)
+                {
+                    OrbitLogger.Warn(LogCategory, $"CopyFromScreen headless fallback: {screenEx.Message}");
+                    g.Clear(System.Drawing.Color.FromArgb(20, 20, 30));
+                }
             }
 
             // Restore MainWindow visibility
@@ -2681,6 +3293,12 @@ public partial class MainWindow : Window
             bitmap.Save(filePath, System.Drawing.Imaging.ImageFormat.Png);
             OrbitLogger.Info(LogCategory, $"Annotation screenshot saved to: {filePath}");
 
+            void RunOnUi(Action act)
+            {
+                if (Dispatcher.CheckAccess()) act();
+                else Dispatcher.Invoke(act);
+            }
+
             // 4. Copy actual image data to Windows Clipboard on UI/STA thread
             try
             {
@@ -2688,15 +3306,18 @@ public partial class MainWindow : Window
                 bitmap.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
                 ms.Position = 0;
 
-                var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
-                bitmapImage.BeginInit();
-                bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-                bitmapImage.StreamSource = ms;
-                bitmapImage.EndInit();
-                bitmapImage.Freeze();
+                RunOnUi(() =>
+                {
+                    var bitmapImage = new System.Windows.Media.Imaging.BitmapImage();
+                    bitmapImage.BeginInit();
+                    bitmapImage.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bitmapImage.StreamSource = ms;
+                    bitmapImage.EndInit();
+                    bitmapImage.Freeze();
 
-                System.Windows.Clipboard.SetImage(bitmapImage);
-                OrbitLogger.Info(LogCategory, "Annotation screenshot copied to Windows clipboard.");
+                    System.Windows.Clipboard.SetImage(bitmapImage);
+                    OrbitLogger.Info(LogCategory, "Annotation screenshot copied to Windows clipboard.");
+                });
             }
             catch (Exception clipEx)
             {
@@ -2704,15 +3325,24 @@ public partial class MainWindow : Window
             }
 
             // 5. Show toast notification on the dynamic island
-            ShowAnnotationToast("Screenshot saved & copied!");
+            RunOnUi(() => ShowAnnotationToast("Screenshot saved & copied!"));
 
             return filePath;
         }
         catch (Exception ex)
         {
-            Opacity = 1.0;
+            void RunOnUi(Action act)
+            {
+                if (Dispatcher.CheckAccess()) act();
+                else Dispatcher.Invoke(act);
+            }
+
+            RunOnUi(() =>
+            {
+                Opacity = 1.0;
+                ShowAnnotationToast("Failed to save screenshot", isError: true);
+            });
             OrbitLogger.Error(LogCategory, $"Failed to capture annotation screenshot: {ex.Message}");
-            ShowAnnotationToast("Failed to save screenshot", isError: true);
             return null;
         }
     }
@@ -3291,13 +3921,47 @@ public partial class MainWindow : Window
     {
         double cx = width / 2.0;
 
+        bool isExpandedDashboard = _lifecycleService?.CurrentState == CompanionState.Expanded
+            || _lifecycleService?.CurrentState == CompanionState.Expanding
+            || _lifecycleService?.CurrentState == CompanionState.Collapsing
+            || _isTransitioningToFullExpand
+            || PillMascot.IsExpanded
+            || (ExpandedView != null && ExpandedView.Visibility == Visibility.Visible);
+
         // Dedicated notch shelf line: faint indication of the mascot notch boundary
         var notchShelf = new StreamGeometry();
         using (var ctx = notchShelf.Open())
         {
-            if (height <= 46.0)
+            if (isExpandedDashboard)
             {
-                double shelfY = Math.Min(35.0, height - 8.0);
+                double x1 = cx - 62.0;
+                double x2 = cx + 62.0;
+                ctx.BeginFigure(new Point(x1, 0), isFilled: false, isClosed: false);
+                ctx.BezierTo(new Point(cx - 55, 0), new Point(cx - 47, 7), new Point(cx - 44, 14), true, true);
+                ctx.BezierTo(new Point(cx - 41, 21), new Point(cx - 34, 30), new Point(cx - 26, 30), true, true);
+                ctx.LineTo(new Point(cx + 26, 30), true, true);
+                ctx.BezierTo(new Point(cx + 34, 30), new Point(cx + 41, 21), new Point(cx + 44, 14), true, true);
+                ctx.BezierTo(new Point(cx + 47, 7), new Point(cx + 55, 0), new Point(x2, 0), true, true);
+            }
+            else if (_isAiGenerating || _isAiResponseBubbleOpen)
+            {
+                double startX = cx - 80.0;
+                double shelfY = 30.0;
+                double y0 = shelfY * (7.0 / 30.0);
+                double y1 = shelfY * (14.0 / 30.0);
+                double y2 = shelfY * (21.0 / 30.0);
+
+                ctx.BeginFigure(new Point(startX + 18, 0), isFilled: false, isClosed: false);
+                ctx.BezierTo(new Point(startX + 25, 0), new Point(startX + 33, y0), new Point(startX + 36, y1), true, true);
+                ctx.BezierTo(new Point(startX + 39, y2), new Point(startX + 46, shelfY), new Point(startX + 54, shelfY), true, true);
+                ctx.LineTo(new Point(startX + 106, shelfY), true, true);
+                ctx.BezierTo(new Point(startX + 114, shelfY), new Point(startX + 121, y2), new Point(startX + 124, y1), true, true);
+                ctx.BezierTo(new Point(startX + 127, y0), new Point(startX + 135, 0), new Point(startX + 142, 0), true, true);
+            }
+            else
+            {
+                double shelfY = Math.Min(40.0, height - 8.0);
+                if (height <= 40.0) shelfY = 30.0;
                 double y0 = shelfY * (7.0 / 30.0);
                 double y1 = shelfY * (14.0 / 30.0);
                 double y2 = shelfY * (21.0 / 30.0);
@@ -3309,61 +3973,12 @@ public partial class MainWindow : Window
                 ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
                 ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
             }
-            else
-            {
-                double x1 = cx - 62.0;
-                double x2 = cx + 62.0;
-                ctx.BeginFigure(new Point(x1, 0), isFilled: false, isClosed: false);
-                ctx.BezierTo(new Point(cx - 55, 0), new Point(cx - 47, 7), new Point(cx - 44, 14), true, true);
-                ctx.BezierTo(new Point(cx - 41, 21), new Point(cx - 34, 30), new Point(cx - 26, 30), true, true);
-                ctx.LineTo(new Point(cx + 26, 30), true, true);
-                ctx.BezierTo(new Point(cx + 34, 30), new Point(cx + 41, 21), new Point(cx + 44, 14), true, true);
-                ctx.BezierTo(new Point(cx + 47, 7), new Point(cx + 55, 0), new Point(x2, 0), true, true);
-            }
         }
         notchShelf.Freeze();
 
-        if (height <= 46.0)
+        // 1. Morphing / Expanded island card contour (STRICTLY only when fully expanding or expanded!)
+        if (isExpandedDashboard)
         {
-            // Exact approved compact notch coordinates centered & horizontally expanded for Quick Actions (height <= 46)
-            double shelfY = Math.Min(35.0, height - 8.0);
-            double y0 = shelfY * (7.0 / 30.0);
-            double y1 = shelfY * (14.0 / 30.0);
-            double y2 = shelfY * (21.0 / 30.0);
-
-            var bg = new StreamGeometry();
-            using (var ctx = bg.Open())
-            {
-                ctx.BeginFigure(new Point(0, 0), isFilled: true, isClosed: true);
-                ctx.LineTo(new Point(18, 0), true, true);
-                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
-                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
-                ctx.LineTo(new Point(width - 54, shelfY), true, true);
-                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
-                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
-                ctx.LineTo(new Point(width, 0), true, true);
-            }
-            bg.Freeze();
-
-            var outline = new StreamGeometry();
-            using (var ctx = outline.Open())
-            {
-                ctx.BeginFigure(new Point(0, 0), isFilled: false, isClosed: false);
-                ctx.LineTo(new Point(18, 0), true, true);
-                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
-                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
-                ctx.LineTo(new Point(width - 54, shelfY), true, true);
-                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
-                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
-                ctx.LineTo(new Point(width, 0), true, true);
-            }
-            outline.Freeze();
-
-            return (bg, outline, notchShelf);
-        }
-        else
-        {
-            // Morphing / Expanded island card contour
             double r = Math.Min(18.0, Math.Min(width / 6.0, height / 3.0));
 
             var bg = new StreamGeometry();
@@ -3406,6 +4021,86 @@ public partial class MainWindow : Window
                 ctx.ArcTo(new Point(r, 0), new System.Windows.Size(r, r), 0, false, SweepDirection.Clockwise, true, true);
 
                 ctx.LineTo(new Point(width - r, 0), true, true);
+            }
+            outline.Freeze();
+
+            return (bg, outline, notchShelf);
+        }
+
+        // 2. AI Response Bubble or Generating: Centered 160 DIP notch cradle at top only (rest of window remains transparent)
+        if (_isAiGenerating || _isAiResponseBubbleOpen)
+        {
+            double startX = cx - 80.0;
+            double shelfY = 30.0;
+            double y0 = shelfY * (7.0 / 30.0);
+            double y1 = shelfY * (14.0 / 30.0);
+            double y2 = shelfY * (21.0 / 30.0);
+
+            var bg = new StreamGeometry();
+            using (var ctx = bg.Open())
+            {
+                ctx.BeginFigure(new Point(startX, 0), isFilled: true, isClosed: true);
+                ctx.LineTo(new Point(startX + 18, 0), true, true);
+                ctx.BezierTo(new Point(startX + 25, 0), new Point(startX + 33, y0), new Point(startX + 36, y1), true, true);
+                ctx.BezierTo(new Point(startX + 39, y2), new Point(startX + 46, shelfY), new Point(startX + 54, shelfY), true, true);
+                ctx.LineTo(new Point(startX + 106, shelfY), true, true);
+                ctx.BezierTo(new Point(startX + 114, shelfY), new Point(startX + 121, y2), new Point(startX + 124, y1), true, true);
+                ctx.BezierTo(new Point(startX + 127, y0), new Point(startX + 135, 0), new Point(startX + 142, 0), true, true);
+                ctx.LineTo(new Point(startX + 160, 0), true, true);
+            }
+            bg.Freeze();
+
+            var outline = new StreamGeometry();
+            using (var ctx = outline.Open())
+            {
+                ctx.BeginFigure(new Point(startX, 0), isFilled: false, isClosed: false);
+                ctx.LineTo(new Point(startX + 18, 0), true, true);
+                ctx.BezierTo(new Point(startX + 25, 0), new Point(startX + 33, y0), new Point(startX + 36, y1), true, true);
+                ctx.BezierTo(new Point(startX + 39, y2), new Point(startX + 46, shelfY), new Point(startX + 54, shelfY), true, true);
+                ctx.LineTo(new Point(startX + 106, shelfY), true, true);
+                ctx.BezierTo(new Point(startX + 114, shelfY), new Point(startX + 121, y2), new Point(startX + 124, y1), true, true);
+                ctx.BezierTo(new Point(startX + 127, y0), new Point(startX + 135, 0), new Point(startX + 142, 0), true, true);
+                ctx.LineTo(new Point(startX + 160, 0), true, true);
+            }
+            outline.Freeze();
+
+            return (bg, outline, notchShelf);
+        }
+
+        // 3. Collapsed State: Standard compact notch or horizontally expanded QuickActions notch
+        // NEVER draw the solid dashboard background when in Collapsed state, regardless of window Height!
+        {
+            double shelfY = Math.Min(40.0, height - 8.0);
+            if (height <= 40.0) shelfY = 30.0;
+            double y0 = shelfY * (7.0 / 30.0);
+            double y1 = shelfY * (14.0 / 30.0);
+            double y2 = shelfY * (21.0 / 30.0);
+
+            var bg = new StreamGeometry();
+            using (var ctx = bg.Open())
+            {
+                ctx.BeginFigure(new Point(0, 0), isFilled: true, isClosed: true);
+                ctx.LineTo(new Point(18, 0), true, true);
+                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
+                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
+                ctx.LineTo(new Point(width - 54, shelfY), true, true);
+                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
+                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
+                ctx.LineTo(new Point(width, 0), true, true);
+            }
+            bg.Freeze();
+
+            var outline = new StreamGeometry();
+            using (var ctx = outline.Open())
+            {
+                ctx.BeginFigure(new Point(0, 0), isFilled: false, isClosed: false);
+                ctx.LineTo(new Point(18, 0), true, true);
+                ctx.BezierTo(new Point(25, 0), new Point(33, y0), new Point(36, y1), true, true);
+                ctx.BezierTo(new Point(39, y2), new Point(46, shelfY), new Point(54, shelfY), true, true);
+                ctx.LineTo(new Point(width - 54, shelfY), true, true);
+                ctx.BezierTo(new Point(width - 46, shelfY), new Point(width - 39, y2), new Point(width - 36, y1), true, true);
+                ctx.BezierTo(new Point(width - 33, y0), new Point(width - 25, 0), new Point(width - 18, 0), true, true);
+                ctx.LineTo(new Point(width, 0), true, true);
             }
             outline.Freeze();
 

@@ -10,7 +10,10 @@ public record SystemMetrics(
     int RamUsagePercent,
     double WifiDownloadSpeedBps,
     double WifiUploadSpeedBps,
-    double GpuUsagePercent);
+    double GpuUsagePercent,
+    int BatteryPercent = -1,
+    bool IsCharging = false,
+    bool IsOnBattery = false);
 
 /// <summary>
 /// Service providing high-performance, lightweight local system metrics (CPU, RAM, Wi-Fi, GPU).

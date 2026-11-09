@@ -12,6 +12,7 @@ using Orbit.Services.Notes;
 using Orbit.Services.SystemControls;
 using Orbit.Services.SystemMonitor;
 using Orbit.Services.Voice;
+using Orbit.Services.Ai;
 
 namespace Orbit.Core;
 
@@ -92,11 +93,18 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<ICommandParser, CommandParser>();
         services.AddSingleton<ICommandHandler, AppLaunchHandler>();
         services.AddSingleton<ICommandHandler, WebSearchHandler>();
+        services.AddSingleton<ICommandHandler, WebsiteSearchHandler>();
         services.AddSingleton<ICommandHandler, FileSearchHandler>();
         services.AddSingleton<ICommandHandler, SystemControlHandler>();
+        services.AddSingleton<ICommandHandler, SystemMetricsHandler>();
         services.AddSingleton<ICommandHandler, ScreenshotHandler>();
         services.AddSingleton<ICommandHandler, NotesHandler>();
         services.AddSingleton<IVoiceCommandExecutor, CommandExecutionService>();
+
+        // 8.7 Local AI Assistant (Ollama, Model Lifecycle, AI Assistant Service)
+        services.AddSingleton<IOllamaClient, OllamaClient>();
+        services.AddSingleton<IModelLifecycleManager, ModelLifecycleManager>();
+        services.AddSingleton<IAiAssistantService, AiAssistantService>();
 
         // 9. Windows
         services.AddSingleton<MainWindow>();

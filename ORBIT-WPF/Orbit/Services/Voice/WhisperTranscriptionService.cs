@@ -22,9 +22,13 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
 
     private WhisperFactory? _factory;
     private WhisperProcessor? _processor;
+    private string _loadedModelName = "None";
+    private string _loadedModelPath = string.Empty;
     private bool _disposed;
 
     public bool IsModelLoaded => _processor != null && !_disposed;
+    public string LoadedModelName => _loadedModelName;
+    public string LoadedModelPath => _loadedModelPath;
 
     public WhisperTranscriptionService(IWhisperModelManager modelManager)
     {
@@ -51,7 +55,7 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
         if (IsModelLoaded || _disposed) return;
 
         var sw = Stopwatch.StartNew();
-        OrbitLogger.Info(LogCategory, "Initializing Whisper speech recognition engine...");
+        OrbitLogger.Info(LogCategory, $"Starting Whisper speech recognition engine initialization (Target: {_modelManager.ModelPath})...");
 
         string modelPath = await _modelManager.EnsureModelAvailableAsync(cancellationToken).ConfigureAwait(false);
 
@@ -67,7 +71,7 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
             }
             catch (Exception ex) when (!modelPath.Equals(_modelManager.FallbackModelPath, StringComparison.OrdinalIgnoreCase) && _modelManager.IsFallbackAvailable)
             {
-                OrbitLogger.Warn(LogCategory, $"Failed to load model '{modelPath}': {ex.Message}. Falling back to Tiny model.");
+                OrbitLogger.Warn(LogCategory, $"Failed to load primary model '{modelPath}': {ex.Message}. Falling back to '{_modelManager.FallbackModelPath}'.");
                 modelPath = _modelManager.FallbackModelPath;
                 _factory = WhisperFactory.FromPath(modelPath);
             }
@@ -82,11 +86,13 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
                 .WithGreedySamplingStrategy(s => s.WithBestOf(1))
                 .Build();
 
+            _loadedModelName = Path.GetFileName(modelPath);
+            _loadedModelPath = modelPath;
+
         }, cancellationToken).ConfigureAwait(false);
 
         sw.Stop();
-        string loadedModel = Path.GetFileName(modelPath);
-        OrbitLogger.Info(LogCategory, $"Whisper engine ({loadedModel}) initialized in {sw.ElapsedMilliseconds}ms.");
+        OrbitLogger.Info(LogCategory, $"Whisper engine ({_loadedModelName}) initialized successfully in {sw.ElapsedMilliseconds}ms. Path: {_loadedModelPath}");
     }
 
     public async Task<string> TranscribePcm16Async(byte[] pcmData, CancellationToken cancellationToken = default)
@@ -131,7 +137,7 @@ public sealed class WhisperTranscriptionService : IWhisperTranscriptionService
             sw.Stop();
             string raw = sb.ToString();
             string cleaned = CleanRecognizedText(raw);
-            OrbitLogger.Info(LogCategory, $"Transcription completed in {sw.ElapsedMilliseconds}ms: '{cleaned}' (raw: '{raw.Trim()}', Audio length: {floatSamples.Length / 16000.0:F2}s)");
+            OrbitLogger.Info(LogCategory, $"[Model: {_loadedModelName}] Transcription completed in {sw.ElapsedMilliseconds}ms: '{cleaned}' (raw: '{raw.Trim()}', Audio length: {floatSamples.Length / 16000.0:F2}s)");
 
             return cleaned;
         }

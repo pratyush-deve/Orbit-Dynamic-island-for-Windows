@@ -243,6 +243,116 @@ public class VoiceSessionAndVadTests
         Assert.NotEmpty(baseResults);
     }
 
+    [Fact]
+    public async System.Threading.Tasks.Task Whisper_Benchmark_BaseVsSmall_SixEvalPhrases()
+    {
+        string modelsDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ORBIT", "models");
+        string basePath = System.IO.Path.Combine(modelsDir, "ggml-base.en.bin");
+        string smallPath = System.IO.Path.Combine(modelsDir, "ggml-small.en.bin");
+        string audioDir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ORBIT", "test_audio_eval");
+
+        Assert.True(System.IO.File.Exists(basePath), "Base model must exist");
+        Assert.True(System.IO.File.Exists(smallPath), "Small model must exist");
+
+        var phrases = new[]
+        {
+            ("phrase1.wav", "Do I have enough memory for Android Studio so I can do my development work?"),
+            ("phrase2.wav", "Open Android Studio."),
+            ("phrase3.wav", "Operate Studio."),
+            ("phrase4.wav", "Check my laptop RAM."),
+            ("phrase5.wav", "Open File Explorer and search for college files on my desktop."),
+            ("phrase6.wav", "Search Myntra for oversized hoodies.")
+        };
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("=== WHISPER BENCHMARK: BASE.EN vs SMALL.EN ===");
+
+        // --- Benchmark Base.en ---
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        long memBeforeBase = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+        var swWarmupBase = System.Diagnostics.Stopwatch.StartNew();
+        using var baseFactory = WhisperFactory.FromPath(basePath);
+        using var baseProcessor = baseFactory.CreateBuilder()
+            .WithLanguage("en")
+            .WithSingleSegment()
+            .WithNoContext()
+            .WithThreads(2)
+            .Build();
+        swWarmupBase.Stop();
+        long memAfterBase = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+        long baseRamDeltaMb = (memAfterBase - memBeforeBase) / (1024 * 1024);
+
+        sb.AppendLine($"[Base.en] Warm-up: {swWarmupBase.ElapsedMilliseconds} ms | RAM delta: ~{baseRamDeltaMb} MB");
+
+        var baseResults = new System.Collections.Generic.List<(string phrase, string recognized, long latencyMs)>();
+        foreach (var (file, phrase) in phrases)
+        {
+            string wavPath = System.IO.Path.Combine(audioDir, file);
+            float[] samples = LoadWavSamples(wavPath);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var text = new System.Text.StringBuilder();
+            await foreach (var seg in baseProcessor.ProcessAsync(samples))
+            {
+                text.Append(seg.Text).Append(' ');
+            }
+            sw.Stop();
+            string cleaned = WhisperTranscriptionService.CleanRecognizedText(text.ToString());
+            baseResults.Add((phrase, cleaned, sw.ElapsedMilliseconds));
+            sb.AppendLine($"  Base -> \"{phrase}\" => \"{cleaned}\" in {sw.ElapsedMilliseconds}ms");
+        }
+
+        baseProcessor.Dispose();
+        baseFactory.Dispose();
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        // --- Benchmark Small.en ---
+        long memBeforeSmall = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+        var swWarmupSmall = System.Diagnostics.Stopwatch.StartNew();
+        using var smallFactory = WhisperFactory.FromPath(smallPath);
+        using var smallProcessor = smallFactory.CreateBuilder()
+            .WithLanguage("en")
+            .WithSingleSegment()
+            .WithNoContext()
+            .WithThreads(2)
+            .Build();
+        swWarmupSmall.Stop();
+        long memAfterSmall = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64;
+        long smallRamDeltaMb = (memAfterSmall - memBeforeSmall) / (1024 * 1024);
+
+        sb.AppendLine($"[Small.en] Warm-up: {swWarmupSmall.ElapsedMilliseconds} ms | RAM delta: ~{smallRamDeltaMb} MB");
+
+        var smallResults = new System.Collections.Generic.List<(string phrase, string recognized, long latencyMs)>();
+        foreach (var (file, phrase) in phrases)
+        {
+            string wavPath = System.IO.Path.Combine(audioDir, file);
+            float[] samples = LoadWavSamples(wavPath);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var text = new System.Text.StringBuilder();
+            await foreach (var seg in smallProcessor.ProcessAsync(samples))
+            {
+                text.Append(seg.Text).Append(' ');
+            }
+            sw.Stop();
+            string cleaned = WhisperTranscriptionService.CleanRecognizedText(text.ToString());
+            smallResults.Add((phrase, cleaned, sw.ElapsedMilliseconds));
+            sb.AppendLine($"  Small -> \"{phrase}\" => \"{cleaned}\" in {sw.ElapsedMilliseconds}ms");
+        }
+
+        smallProcessor.Dispose();
+        smallFactory.Dispose();
+
+        string evalReportPath = System.IO.Path.Combine(modelsDir, "benchmark_base_vs_small.txt");
+        System.IO.File.WriteAllText(evalReportPath, sb.ToString());
+
+        Assert.NotEmpty(smallResults);
+    }
+
     private static float[] LoadWavSamples(string wavPath)
     {
         byte[] bytes = System.IO.File.ReadAllBytes(wavPath);
@@ -414,8 +524,8 @@ public class VoiceSessionAndVadTests
     public void WhisperModelManager_PointsToPersistentAppDataAndDetectsModel()
     {
         var manager = new WhisperModelManager();
-        Assert.Contains(System.IO.Path.Combine("ORBIT", "models", "ggml-base.en.bin"), manager.ModelPath);
-        Assert.Contains(System.IO.Path.Combine("ORBIT", "models", "ggml-tiny.en.bin"), manager.FallbackModelPath);
+        Assert.Contains(System.IO.Path.Combine("ORBIT", "models", "ggml-small.en.bin"), manager.ModelPath);
+        Assert.Contains(System.IO.Path.Combine("ORBIT", "models", "ggml-base.en.bin"), manager.FallbackModelPath);
         Assert.True(manager.IsModelAvailable);
         Assert.True(manager.IsFallbackAvailable);
     }
@@ -451,6 +561,7 @@ public class VoiceSessionAndVadTests
     private class FakeWhisperTranscriptionService : IWhisperTranscriptionService
     {
         public bool IsModelLoaded { get; set; } = true;
+        public string LoadedModelName => "fake-small.en.bin";
         public string ResultToReturn { get; set; } = "open settings";
         public int DelayMs { get; set; } = 50;
 
@@ -540,6 +651,7 @@ public class VoiceSessionAndVadTests
 
         await service.InitializeAsync();
         Assert.True(service.IsModelLoaded);
+        Assert.Equal("ggml-small.en.bin", service.LoadedModelName);
 
         // Transcribe silent audio
         byte[] pcm = new byte[16000]; // 0.5s of silence

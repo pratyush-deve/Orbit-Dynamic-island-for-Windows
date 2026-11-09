@@ -45,8 +45,14 @@ public sealed class AppLaunchHandler : ICommandHandler
             var target = _appRegistry.ResolveApp(appName, allDiscovered);
             if (target == null)
             {
-                OrbitLogger.Warn(LogCategory, $"Application not recognized or installed: '{appName}'");
-                return new CommandResult(false, $"App not found: {appName}", intent);
+                var candidate = _appRegistry.SuggestCandidate(appName, allDiscovered);
+                OrbitLogger.Warn(LogCategory, $"Application not directly recognized: '{appName}'. Candidate: '{candidate?.DisplayName}'");
+
+                string prompt = candidate != null
+                    ? $"Did you mean {candidate.DisplayName}?"
+                    : $"I couldn't find an app called \"{appName}\". Which app would you like me to open?";
+
+                return new CommandResult(false, prompt, intent);
             }
 
             // Launch safe target

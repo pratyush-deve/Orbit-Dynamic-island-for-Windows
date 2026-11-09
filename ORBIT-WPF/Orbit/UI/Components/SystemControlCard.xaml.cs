@@ -115,6 +115,7 @@ public partial class SystemControlCard : UserControl
     {
         _isAvailable = true;
         _isEnabled = false;
+        ToolTip = "Open Windows Settings";
 
         BadgeStatus.Visibility = Visibility.Collapsed;
         TxtDeviceInfo.Visibility = Visibility.Collapsed;
@@ -142,6 +143,7 @@ public partial class SystemControlCard : UserControl
 
         _isAvailable = status.IsAvailable;
         _isEnabled = status.IsEnabled;
+        ToolTip = !string.IsNullOrWhiteSpace(status.Detail) ? status.Detail : status.StatusLabel;
 
         bool isDeviceControl = ControlType == SystemControlType.WiFi || ControlType == SystemControlType.Bluetooth;
 

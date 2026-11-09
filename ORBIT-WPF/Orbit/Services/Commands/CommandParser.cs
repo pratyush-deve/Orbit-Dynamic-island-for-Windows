@@ -27,52 +27,84 @@ public sealed class CommandParser : ICommandParser
 
         string cleaned = CleanPunctuation(rawText);
         string normalized = NormalizeNumberWords(cleaned.ToLowerInvariant());
+        string stripped = StripConversationalFillers(normalized);
 
-        OrbitLogger.Info(LogCategory, $"Parsing raw: '{rawText}' -> normalized: '{normalized}'");
+        OrbitLogger.Info(LogCategory, $"Parsing raw: '{rawText}' -> normalized: '{normalized}' -> stripped: '{stripped}'");
 
         // 1. Screenshot
-        if (IsScreenshotCommand(normalized))
+        if (IsScreenshotCommand(normalized) || IsScreenshotCommand(stripped))
         {
             return new CommandIntent(CommandType.Screenshot, rawText, 0.95f);
         }
 
         // 2. System Controls (Volume & Mute)
-        var systemIntent = TryParseSystemControl(normalized, rawText);
+        var systemIntent = TryParseSystemControl(normalized, rawText) ?? TryParseSystemControl(stripped, rawText);
         if (systemIntent != null)
         {
             return systemIntent;
         }
 
+        // 2b. System Metrics & Laptop Health (RAM, Battery, CPU, Status)
+        var metricsIntent = TryParseSystemMetrics(normalized, rawText) ?? TryParseSystemMetrics(stripped, rawText);
+        if (metricsIntent != null)
+        {
+            return metricsIntent;
+        }
+
         // 3. Notes (Note taking)
-        var noteIntent = TryParseNotes(normalized, rawText);
+        var noteIntent = TryParseNotes(normalized, rawText) ?? TryParseNotes(stripped, rawText);
         if (noteIntent != null)
         {
             return noteIntent;
         }
 
-        // 4. Local File Search (Checked before Web Search to capture "Find ... files")
-        var fileSearchIntent = TryParseFileSearch(normalized, rawText);
+        // 4. Local File Search (Checked before Web Search to capture local storage targets)
+        var fileSearchIntent = TryParseFileSearch(normalized, rawText) ?? TryParseFileSearch(stripped, rawText);
         if (fileSearchIntent != null)
         {
             return fileSearchIntent;
         }
 
-        // 5. Web Search
-        var webSearchIntent = TryParseWebSearch(normalized, rawText);
-        if (webSearchIntent != null)
+        // 5. Targeted Website Search (Amazon, Myntra, Flipkart, YouTube, GitHub, Reddit, Wikipedia, unknown site)
+        var websiteSearchIntent = TryParseWebsiteSearch(normalized, rawText) ?? TryParseWebsiteSearch(stripped, rawText);
+        if (websiteSearchIntent != null)
         {
-            return webSearchIntent;
+            return websiteSearchIntent;
         }
 
-        // 6. Application Launch
+        // 6. Application Launch & Ambiguity Clarification
         var appIntent = TryParseAppLaunch(normalized, rawText);
         if (appIntent != null)
         {
             return appIntent;
         }
 
+        // 7. General Web Search (Google, online lookup)
+        var webSearchIntent = TryParseWebSearch(normalized, rawText);
+        if (webSearchIntent != null)
+        {
+            return webSearchIntent;
+        }
+
         OrbitLogger.Info(LogCategory, $"Unrecognized command: '{rawText}'");
         return new CommandIntent(CommandType.Unknown, rawText, 0.0f);
+    }
+
+    public static string StripConversationalFillers(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        string cleaned = text.Trim();
+
+        // Leading greetings and assistant wake names
+        cleaned = Regex.Replace(cleaned, @"^(?:hey\s+orbit[, ]*|orbit[, ]*|hey[, ]*|hi[, ]*|hello[, ]*)", "", RegexOptions.IgnoreCase).Trim();
+
+        // Leading polite, helper, and modal preambles
+        cleaned = Regex.Replace(cleaned, @"^(?:can\s+you\s+(?:please\s+)?|could\s+you\s+(?:please\s+)?|would\s+you\s+(?:please\s+)?|will\s+you\s+(?:please\s+)?|i\s+want\s+you\s+to\s+|i'd\s+like\s+you\s+to\s+|please\s+|go\s+ahead\s+and\s+|just\s+)", "", RegexOptions.IgnoreCase).Trim();
+
+        // Trailing conversational fillers
+        cleaned = Regex.Replace(cleaned, @"\s+(?:for\s+me|right\s+now|now|please|bro|buddy|thanks|thank\s+you)$", "", RegexOptions.IgnoreCase).Trim();
+
+        return cleaned;
     }
 
     private static string CleanPunctuation(string text)
@@ -131,48 +163,81 @@ public sealed class CommandParser : ICommandParser
 
     private static CommandIntent? TryParseSystemControl(string normalized, string rawText)
     {
-        // Set volume with explicit percent or number: "set volume to 50 percent", "set volume 50%", "volume to 70 percent"
-        var matchSet = Regex.Match(normalized, @"^(?:please\s+)?(?:set|change)?\s*volume\s*(?:to)?\s*(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
+        string text = normalized.Trim();
+
+        // 1. Set volume: "set volume to 50", "set the volume to 50 percent", "turn volume to 50", "volume to 70", "volume 50%"
+        var matchSet = Regex.Match(text, @"^(?:please\s+)?(?:set|change|turn|put)?\s*(?:the\s+|my\s+)?(?:volume|sound|audio)\s*(?:to|at)?\s*(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
         if (matchSet.Success && int.TryParse(matchSet.Groups[1].Value, out int targetVolume))
         {
             int clamped = Math.Clamp(targetVolume, 0, 100);
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.SetVolume, Value: clamped);
         }
 
-        // Increase volume
-        if (Regex.IsMatch(normalized, @"^(?:please\s+)?(?:increase\s+volume|turn\s+up\s+(?:the\s+)?volume|volume\s+up|boost\s+volume)$", RegexOptions.IgnoreCase))
+        // 2. Increase volume: "increase volume", "increase the volume", "turn up the volume", "turn the volume up", "volume up", "louder"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:increase|turn\s+up|raise|boost)\s*(?:the\s+|my\s+)?(?:volume|sound|audio)$|^(?:please\s+)?turn\s+(?:the\s+|my\s+)?(?:volume|sound|audio)\s+up$|^(?:volume\s+up|louder|make\s+it\s+louder)$", RegexOptions.IgnoreCase))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.IncreaseVolume, Value: 10);
         }
 
-        var matchInc = Regex.Match(normalized, @"^(?:please\s+)?increase\s+volume\s+by\s+(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
+        var matchInc = Regex.Match(text, @"^(?:please\s+)?(?:increase|turn\s+up|raise)\s+(?:the\s+|my\s+)?(?:volume|sound|audio)\s+by\s+(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
         if (matchInc.Success && int.TryParse(matchInc.Groups[1].Value, out int incStep))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.IncreaseVolume, Value: Math.Clamp(incStep, 1, 100));
         }
 
-        // Decrease volume
-        if (Regex.IsMatch(normalized, @"^(?:please\s+)?(?:decrease\s+volume|turn\s+down\s+(?:the\s+)?volume|volume\s+down|lower\s+(?:the\s+)?volume)$", RegexOptions.IgnoreCase))
+        // 3. Decrease volume: "decrease volume", "decrease the volume", "turn down the volume", "turn the volume down", "volume down", "lower the volume", "quieter"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:decrease|turn\s+down|lower|reduce)\s*(?:the\s+|my\s+)?(?:volume|sound|audio)$|^(?:please\s+)?turn\s+(?:the\s+|my\s+)?(?:volume|sound|audio)\s+down$|^(?:volume\s+down|quieter|softer|make\s+it\s+quieter)$", RegexOptions.IgnoreCase))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.DecreaseVolume, Value: 10);
         }
 
-        var matchDec = Regex.Match(normalized, @"^(?:please\s+)?decrease\s+volume\s+by\s+(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
+        var matchDec = Regex.Match(text, @"^(?:please\s+)?(?:decrease|turn\s+down|lower|reduce)\s+(?:the\s+|my\s+)?(?:volume|sound|audio)\s+by\s+(\d+)\s*(?:percent|%)?$", RegexOptions.IgnoreCase);
         if (matchDec.Success && int.TryParse(matchDec.Groups[1].Value, out int decStep))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.DecreaseVolume, Value: Math.Clamp(decStep, 1, 100));
         }
 
-        // Mute
-        if (Regex.IsMatch(normalized, @"^(?:please\s+)?(?:mute|mute\s+volume|mute\s+sound|mute\s+audio)$", RegexOptions.IgnoreCase))
+        // 4. Mute: "mute", "mute volume", "mute the volume", "mute sound", "mute laptop", "mute pc", "silence"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:mute|silence|be\s+quiet)(?:\s+(?:the\s+|my\s+)?(?:volume|sound|audio|laptop|pc))?$", RegexOptions.IgnoreCase))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.Mute);
         }
 
-        // Unmute
-        if (Regex.IsMatch(normalized, @"^(?:please\s+)?(?:unmute|unmute\s+volume|unmute\s+sound|unmute\s+audio)$", RegexOptions.IgnoreCase))
+        // 5. Unmute: "unmute", "unmute volume", "unmute sound", "unmute audio", "unmute laptop"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?unmute(?:\s+(?:the\s+|my\s+)?(?:volume|sound|audio|laptop|pc))?$", RegexOptions.IgnoreCase))
         {
             return new CommandIntent(CommandType.SystemControl, rawText, 0.95f, ControlAction: SystemControlAction.Unmute);
+        }
+
+        return null;
+    }
+
+    private static CommandIntent? TryParseSystemMetrics(string normalized, string rawText)
+    {
+        string text = normalized.Trim();
+
+        // 1. RAM / Memory check: "check my lappy ram", "check ram", "how much ram is used", "check my laptop ram", "check memory"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:check|how\s+much|what\s+is|show)(?:\s+(?:my\s+|the\s+)?(?:lappy|laptop|pc))?\s+(?:ram|memory)(?:\s+usage|\s+is\s+used)?$|^(?:ram\s+usage|memory\s+usage|check\s+ram)$", RegexOptions.IgnoreCase))
+        {
+            return new CommandIntent(CommandType.SystemMetrics, rawText, 0.95f, MetricsSubtype: SystemMetricsSubtype.Ram);
+        }
+
+        // 2. Battery check: "check battery", "battery status", "how much battery", "check my battery percentage"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:check|how\s+much|what\s+is|show)(?:\s+(?:my\s+|the\s+)?(?:lappy|laptop|pc))?\s+battery(?:\s+percentage|\s+status|\s+left)?$|^(?:battery\s+status|battery\s+percentage|check\s+battery)$", RegexOptions.IgnoreCase))
+        {
+            return new CommandIntent(CommandType.SystemMetrics, rawText, 0.95f, MetricsSubtype: SystemMetricsSubtype.Battery);
+        }
+
+        // 3. CPU check: "check cpu", "cpu usage", "check processor"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:check|how\s+much|what\s+is|show)(?:\s+(?:my\s+|the\s+)?(?:lappy|laptop|pc))?\s+(?:cpu|processor)(?:\s+usage)?$|^(?:cpu\s+usage|check\s+cpu)$", RegexOptions.IgnoreCase))
+        {
+            return new CommandIntent(CommandType.SystemMetrics, rawText, 0.95f, MetricsSubtype: SystemMetricsSubtype.Cpu);
+        }
+
+        // 4. Laptop health / general status: "check my laptop health", "laptop status", "how is my laptop", "check system health", "check laptop status", "check pc health"
+        if (Regex.IsMatch(text, @"^(?:please\s+)?(?:check|how\s+is|what\s+is|show)\s+(?:my\s+)?(?:lappy|laptop|pc|system)\s+(?:health|status|performance)$|^(?:laptop\s+status|system\s+status|laptop\s+health|system\s+health)$", RegexOptions.IgnoreCase))
+        {
+            return new CommandIntent(CommandType.SystemMetrics, rawText, 0.95f, MetricsSubtype: SystemMetricsSubtype.All);
         }
 
         return null;
@@ -201,23 +266,39 @@ public sealed class CommandParser : ICommandParser
 
     private static CommandIntent? TryParseFileSearch(string normalized, string rawText)
     {
-        // 0. Explicit in-folder search: "Find random college files in my desktop", "Find invoice in downloads", "Search for photos in pictures"
-        var matchInFolder = Regex.Match(rawText, @"^(?:please\s+)?(?:find|search(?:\s+for)?)\s+(.+?)(?:\s+files)?\s+in\s+(?:my\s+|the\s+)?(desktop|downloads|documents|pictures|music|videos|c\s+drive|d\s+drive|[a-zA-Z0-9_\-]+)$", RegexOptions.IgnoreCase);
+        string candidate = StripConversationalFillers(rawText);
+
+        // Guardrail: Explicit web search queries with local words (e.g. "Search the web for desktop wallpapers", "Search Google for download speed")
+        if (Regex.IsMatch(candidate, @"^(?:please\s+)?(?:search\s+(?:the\s+)?web|search\s+google|google\s+search)\b", RegexOptions.IgnoreCase))
+        {
+            return null;
+        }
+
+        // 0. Explicit in-folder search:
+        // "Open File Explorer and search for college files on my desktop"
+        // "Open File Explorer and search for random college files folder in my desktop"
+        // "Find college files on my desktop"
+        // "Find invoice in downloads"
+        var matchInFolder = Regex.Match(candidate, @"^(?:please\s+)?(?:open\s+(?:file\s+)?explorer\s+and\s+)?(?:find|search(?:\s+for)?)\s+(.+?)\s+(?:in|on)\s+(?:my\s+|the\s+)?(desktop|downloads|documents|pictures|music|videos|[a-zA-Z]\s+drive|[a-zA-Z]:)$", RegexOptions.IgnoreCase);
         if (matchInFolder.Success)
         {
             string query = matchInFolder.Groups[1].Value.Trim();
-            string folder = matchInFolder.Groups[2].Value.Trim();
+            string folder = matchInFolder.Groups[2].Value.Trim().ToLowerInvariant();
+            if (query.EndsWith(" files", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query[..^6].Trim();
+            }
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query, Scope: folder);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query, Scope: folder, Query: query);
             }
         }
 
-        // "Search desktop for random college files", "Search downloads for invoice"
-        var matchFolderSearch = Regex.Match(rawText, @"^(?:please\s+)?search\s+(?:my\s+|the\s+)?(desktop|downloads|documents|pictures|music|videos|c\s+drive|d\s+drive)\s+(?:for\s+)(.+)$", RegexOptions.IgnoreCase);
+        // 1. "Search desktop for random college files", "Search Downloads for PDFs", "Search my D drive for Android projects"
+        var matchFolderSearch = Regex.Match(candidate, @"^(?:please\s+)?(?:open\s+(?:file\s+)?explorer\s+and\s+)?search\s+(?:my\s+|the\s+)?(desktop|downloads|documents|pictures|music|videos|[a-zA-Z]\s+drive|[a-zA-Z]:)\s+(?:for\s+)(.+)$", RegexOptions.IgnoreCase);
         if (matchFolderSearch.Success)
         {
-            string folder = matchFolderSearch.Groups[1].Value.Trim();
+            string folder = matchFolderSearch.Groups[1].Value.Trim().ToLowerInvariant();
             string query = matchFolderSearch.Groups[2].Value.Trim();
             if (query.EndsWith(" files", StringComparison.OrdinalIgnoreCase))
             {
@@ -225,52 +306,93 @@ public sealed class CommandParser : ICommandParser
             }
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query, Scope: folder);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query, Scope: folder, Query: query);
             }
         }
 
-        // 1. "Find files named project report", "Search for files named...", "Find files called..."
-        var matchNamed = Regex.Match(rawText, @"^(?:please\s+)?(?:search\s+for\s+|find\s+)?files\s+(?:named|called)\s+(.+)$", RegexOptions.IgnoreCase);
+        // 2. "Find the folder containing my project", "Find folder named Android Studio"
+        var matchFolderNamed = Regex.Match(candidate, @"^(?:please\s+)?find\s+(?:the\s+)?folder\s+(?:containing\s+|named\s+|called\s+)?(.+)$", RegexOptions.IgnoreCase);
+        if (matchFolderNamed.Success)
+        {
+            string folderName = matchFolderNamed.Groups[1].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(folderName))
+            {
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: $"folder {folderName}", Scope: "desktop", Query: folderName);
+            }
+        }
+
+        // 3. "Find files named project report", "Search for files named...", "Find files called..."
+        var matchNamed = Regex.Match(candidate, @"^(?:please\s+)?(?:search\s+for\s+|find\s+)?files\s+(?:named|called)\s+(.+)$", RegexOptions.IgnoreCase);
         if (matchNamed.Success)
         {
             string query = matchNamed.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.95f, Target: query, Query: query);
             }
         }
 
-        // 2. "Find Android Studio files" -> "find (.+) files"
-        var matchFiles = Regex.Match(rawText, @"^(?:please\s+)?find\s+(.+?)\s+files$", RegexOptions.IgnoreCase);
+        // 4. "Find desktop wallpaper files on my laptop" (local files on laptop)
+        var matchLaptopFiles = Regex.Match(candidate, @"^(?:please\s+)?(?:find|search(?:\s+for)?)\s+(.+?)\s+(?:files\s+)?on\s+(?:my\s+)?(?:laptop|computer|pc)$", RegexOptions.IgnoreCase);
+        if (matchLaptopFiles.Success)
+        {
+            string query = matchLaptopFiles.Groups[1].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query, Query: query);
+            }
+        }
+
+        // 5. "Find Android Studio files" -> "find (.+) files"
+        var matchFiles = Regex.Match(candidate, @"^(?:please\s+)?find\s+(.+?)\s+files$", RegexOptions.IgnoreCase);
         if (matchFiles.Success)
         {
             string query = matchFiles.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query, Query: query);
             }
         }
 
-        // 3. "Search my/this laptop/computer/pc/drive for PDF files", "Search local files for...", "Search files for..."
-        var matchDevice = Regex.Match(rawText, @"^(?:please\s+)?search\s+(?:my\s+|this\s+|local\s+)?(?:laptop|computer|pc|drive|local\s+files|files)\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
+        // 6. "Search my/this laptop/computer/pc/drive for PDF files", "Search local files for...", "Search files for..."
+        var matchDevice = Regex.Match(candidate, @"^(?:please\s+)?search\s+(?:my\s+|this\s+|local\s+)?(?:laptop|computer|pc|local\s+files|files)\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
         if (matchDevice.Success)
         {
             string query = matchDevice.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query, Query: query);
             }
         }
 
-        // 4. "Find file <name>" or "Find the file <name>"
-        var matchSingleFile = Regex.Match(rawText, @"^(?:please\s+)?find\s+(?:the\s+)?file\s+(.+)$", RegexOptions.IgnoreCase);
+        // 7. "Find file <name>" or "Find the file <name>"
+        var matchSingleFile = Regex.Match(candidate, @"^(?:please\s+)?find\s+(?:the\s+)?file\s+(.+)$", RegexOptions.IgnoreCase);
         if (matchSingleFile.Success)
         {
             string query = matchSingleFile.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.FileSearch, rawText, 0.90f, Target: query, Query: query);
             }
+        }
+
+        return null;
+    }
+
+    private static CommandIntent? TryParseWebsiteSearch(string normalized, string rawText)
+    {
+        string candidate = StripConversationalFillers(rawText);
+
+        if (SiteSearchRegistry.TryExtractSiteSearch(candidate, out string targetSite, out string query))
+        {
+            return new CommandIntent(
+                CommandType.WebsiteSearch,
+                rawText,
+                0.95f,
+                Target: query,
+                Scope: targetSite,
+                Query: query
+            );
         }
 
         return null;
@@ -278,80 +400,71 @@ public sealed class CommandParser : ICommandParser
 
     private static CommandIntent? TryParseWebSearch(string normalized, string rawText)
     {
-        // 0. Compound search phrases: "Open Google and search for wifi speed test", "Open Chrome and search...", "Go to Google and search for..."
-        var matchCompound = Regex.Match(rawText, @"^(?:please\s+)?(?:open|launch|start|go\s+to)\s+(?:google|chrome|google\s+chrome|browser|the\s+browser|the\s+web|the\s+internet)\s+(?:and\s+)?(?:search|look\s+up)(?:\s+for)?\s+(.+)$", RegexOptions.IgnoreCase);
+        string candidate = StripConversationalFillers(rawText);
+
+        // Explicit Google search: "Google search for Android Studio errors", "Search Google for..."
+        var matchGoogleExplicit = Regex.Match(candidate, @"^(?:please\s+)?(?:google\s+search\s+(?:for\s+)?|search\s+google\s+(?:for\s+)?)(.+)$", RegexOptions.IgnoreCase);
+        if (matchGoogleExplicit.Success)
+        {
+            string query = matchGoogleExplicit.Groups[1].Value.Trim();
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query, Scope: "google", Query: query);
+            }
+        }
+
+        // 1. Compound search phrases targeting browser explicitly: "Open Google and search for wifi speed test", "Open Chrome and search..."
+        var matchCompound = Regex.Match(candidate, @"^(?:please\s+)?(?:open|launch|start|go\s+to)\s+(?:google|chrome|google\s+chrome|browser|the\s+browser|the\s+web|the\s+internet)\s+(?:and\s+)?(?:search|look\s+up)(?:\s+for)?\s+(.+)$", RegexOptions.IgnoreCase);
         if (matchCompound.Success)
         {
             string query = matchCompound.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query);
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query, Scope: "google", Query: query);
             }
         }
 
-        // Generic "... and search for <query>" or "... and search <query>"
-        var matchAndSearch = Regex.Match(rawText, @"^(?:.+?)\s+and\s+search\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
-        if (matchAndSearch.Success)
-        {
-            string query = matchAndSearch.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(query))
-            {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query);
-            }
-        }
-
-        // "Search Google for Kotlin Jetpack Compose", "Search Google for..."
-        var matchGoogle = Regex.Match(rawText, @"^(?:please\s+)?search\s+google\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
-        if (matchGoogle.Success)
-        {
-            string query = matchGoogle.Groups[1].Value.Trim();
-            if (!string.IsNullOrWhiteSpace(query))
-            {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query);
-            }
-        }
-
-        // "Search the web for...", "Search web for..."
-        var matchWeb = Regex.Match(rawText, @"^(?:please\s+)?search\s+(?:the\s+)?web\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
+        // 2. "Search the web for...", "Search web for..."
+        var matchWeb = Regex.Match(candidate, @"^(?:please\s+)?search\s+(?:the\s+)?web\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
         if (matchWeb.Success)
         {
             string query = matchWeb.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query);
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.95f, Target: query, Scope: "google", Query: query);
             }
         }
 
-        // "Look up Whisper.cpp on Google", "Look up Whisper.cpp"
-        var matchLookup = Regex.Match(rawText, @"^(?:please\s+)?look\s+up\s+(.+?)(?:\s+on\s+google|\s+online)?$", RegexOptions.IgnoreCase);
+        // 3. "Look up Whisper.cpp on Google", "Look up Whisper.cpp online"
+        var matchLookup = Regex.Match(candidate, @"^(?:please\s+)?look\s+up\s+(.+?)(?:\s+on\s+google|\s+online)?$", RegexOptions.IgnoreCase);
         if (matchLookup.Success)
         {
             string query = matchLookup.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query, Scope: "google", Query: query);
             }
         }
 
-        // "Google Kotlin Jetpack Compose"
-        var matchGoogleDirect = Regex.Match(rawText, @"^(?:please\s+)?google\s+(.+)$", RegexOptions.IgnoreCase);
+        // 4. "Google Kotlin Jetpack Compose", "Google Android Studio errors"
+        var matchGoogleDirect = Regex.Match(candidate, @"^(?:please\s+)?google\s+(.+)$", RegexOptions.IgnoreCase);
         if (matchGoogleDirect.Success)
         {
             string query = matchGoogleDirect.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query, Scope: "google", Query: query);
             }
         }
 
-        // "Search for Wi-Fi speed test", "Search for...", "Search Wi-Fi speed test"
-        var matchSearchGeneral = Regex.Match(rawText, @"^(?:please\s+)?search\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
+        // 5. General search phrases: "Search for Android Studio errors", "Search for Wi-Fi speed test"
+        var matchSearchGeneral = Regex.Match(candidate, @"^(?:please\s+)?search\s+(?:for\s+)?(.+)$", RegexOptions.IgnoreCase);
         if (matchSearchGeneral.Success)
         {
             string query = matchSearchGeneral.Groups[1].Value.Trim();
             if (!string.IsNullOrWhiteSpace(query))
             {
-                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query);
+                return new CommandIntent(CommandType.WebSearch, rawText, 0.90f, Target: query, Scope: "google", Query: query);
             }
         }
 
@@ -360,11 +473,57 @@ public sealed class CommandParser : ICommandParser
 
     private CommandIntent? TryParseAppLaunch(string normalized, string rawText)
     {
-        // "open Android Studio", "launch Google Chrome", "start Notepad"
-        var match = Regex.Match(rawText, @"^(?:please\s+)?(?:open|launch|start|run)\s+(.+)$", RegexOptions.IgnoreCase);
+        string candidate = StripConversationalFillers(rawText);
+
+        // Check for compound multi-action: e.g. "Search Myntra and then open Chrome"
+        if (Regex.IsMatch(candidate, @"\band\s+(?:then\s+)?(?:open|launch)\b", RegexOptions.IgnoreCase))
+        {
+            // Ambiguous compound command requiring clarification
+            return new CommandIntent(
+                CommandType.Clarification,
+                rawText,
+                0.50f,
+                Target: "CompoundAction",
+                ClarificationPrompt: "Would you like me to search Myntra or open Chrome first?"
+            );
+        }
+
+        // Ambiguous standalone app keyword: e.g. "Studio" or "Open Studio"
+        if (Regex.IsMatch(candidate, @"^(?:please\s+)?(?:open\s+|launch\s+|start\s+)?studio$", RegexOptions.IgnoreCase))
+        {
+            var pending = new CommandIntent(CommandType.LaunchApp, rawText, 0.95f, Target: "Android Studio");
+            return new CommandIntent(
+                CommandType.Clarification,
+                rawText,
+                0.50f,
+                Target: "Android Studio",
+                PendingAction: pending,
+                ClarificationPrompt: "Did you mean Android Studio?"
+            );
+        }
+
+        // Ambiguous phonetic misinterpretation: e.g. "Operate staff", "Open staff"
+        if (Regex.IsMatch(candidate, @"^(?:please\s+)?(?:open|launch|start|run|operate)\s+(?:staff|stuff)$", RegexOptions.IgnoreCase))
+        {
+            var pending = new CommandIntent(CommandType.LaunchApp, rawText, 0.95f, Target: "Android Studio");
+            return new CommandIntent(
+                CommandType.Clarification,
+                rawText,
+                0.50f,
+                Target: "Android Studio",
+                PendingAction: pending,
+                ClarificationPrompt: "Did you mean Android Studio?"
+            );
+        }
+
+        // "open Android Studio", "launch Google Chrome", "start Notepad", "operate studio", "open my mails"
+        var match = Regex.Match(candidate, @"^(?:please\s+)?(?:open|launch|start|run|operate)\s+(.+)$", RegexOptions.IgnoreCase);
         if (match.Success)
         {
             string appName = match.Groups[1].Value.Trim();
+            if (appName.StartsWith("the ", StringComparison.OrdinalIgnoreCase)) appName = appName[4..].Trim();
+            if (appName.StartsWith("my ", StringComparison.OrdinalIgnoreCase)) appName = appName[3..].Trim();
+
             if (!string.IsNullOrWhiteSpace(appName))
             {
                 // Disallow arbitrary executable extensions or command injection characters
@@ -381,8 +540,30 @@ public sealed class CommandParser : ICommandParser
                     return null;
                 }
 
-                float confidence = _appRegistry.IsRecognizedApp(appName) ? 0.95f : 0.70f;
-                return new CommandIntent(CommandType.LaunchApp, rawText, confidence, Target: appName);
+                // Direct recognition (high confidence)
+                if (_appRegistry.IsRecognizedApp(appName))
+                {
+                    return new CommandIntent(CommandType.LaunchApp, rawText, 0.95f, Target: appName);
+                }
+
+                // Intelligent semantic/fuzzy candidate suggestion (e.g. "messenger app" -> WhatsApp, fuzzy name)
+                var candidateTarget = _appRegistry.SuggestCandidate(appName);
+                if (candidateTarget != null)
+                {
+                    var pending = new CommandIntent(CommandType.LaunchApp, rawText, 0.95f, Target: candidateTarget.DisplayName);
+                    return new CommandIntent(
+                        CommandType.Clarification,
+                        rawText,
+                        0.75f,
+                        Target: candidateTarget.DisplayName,
+                        PendingAction: pending,
+                        ClarificationPrompt: $"Did you mean {candidateTarget.DisplayName}?"
+                    );
+                }
+
+                // Completely unrecognized app (e.g. misheard transcription like "same data"):
+                // Assign low confidence (0.40f) so it does not trigger a blind deterministic execution
+                return new CommandIntent(CommandType.LaunchApp, rawText, 0.40f, Target: appName);
             }
         }
 

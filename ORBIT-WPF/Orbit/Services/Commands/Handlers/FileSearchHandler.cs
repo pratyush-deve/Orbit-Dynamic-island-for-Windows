@@ -29,7 +29,7 @@ public sealed class FileSearchHandler : ICommandHandler
 
         try
         {
-            // 1. If user targeted a specific folder (e.g. Desktop, Downloads, Documents)
+            // 1. If user targeted a specific folder (e.g. Desktop, Downloads, Documents, D drive)
             if (!string.IsNullOrWhiteSpace(scope))
             {
                 var (folderPath, folderDisplayName) = ResolveFolder(scope);
@@ -41,18 +41,28 @@ public sealed class FileSearchHandler : ICommandHandler
                     if (matches.Count > 0)
                     {
                         string firstMatch = matches[0];
-                        OrbitLogger.Info(LogCategory, $"Found {matches.Count} match(es) in {folderDisplayName}. Selecting: {firstMatch}");
+                        bool isDir = Directory.Exists(firstMatch);
+                        OrbitLogger.Info(LogCategory, $"Found {matches.Count} match(es) in {folderDisplayName} (isDir={isDir}). Target: {firstMatch}");
 
-                        // Open Explorer and select the first matching file
-                        Process.Start("explorer.exe", $"/select,\"{firstMatch}\"");
+                        if (isDir)
+                        {
+                            // Open Explorer directly inside or at the matched directory
+                            Process.Start("explorer.exe", firstMatch);
+                        }
+                        else
+                        {
+                            // Open Explorer and select the first matching file
+                            Process.Start("explorer.exe", $"/select,\"{firstMatch}\"");
+                        }
 
-                        return new CommandResult(true, $"Found {matches.Count} file(s) in {folderDisplayName}", intent, firstMatch);
+                        string itemType = isDir ? "folder" : "file(s)";
+                        return new CommandResult(true, $"Found {matches.Count} {itemType} in {folderDisplayName}", intent, firstMatch);
                     }
                     else
                     {
                         OrbitLogger.Info(LogCategory, $"No matches found in {folderDisplayName}. Opening folder and informing user.");
 
-                        // As requested: Open the folder so user can browse, and report unable to find before closing voice
+                        // Open the folder so user can browse, and report unable to find
                         Process.Start("explorer.exe", folderPath);
 
                         return new CommandResult(false, $"Can't find \"{query}\" in {folderDisplayName}", intent);
@@ -189,28 +199,99 @@ public sealed class FileSearchHandler : ICommandHandler
                 ReturnSpecialDirectories = false
             };
 
-            // Tokenize query words (e.g. "random", "college")
-            var tokens = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                              .Where(t => t.Length > 2)
-                              .ToArray();
+            string cleanQuery = query.Trim();
+            bool userWantsFolder = System.Text.RegularExpressions.Regex.IsMatch(cleanQuery, @"\b(?:folder|directory)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
+            // Strip filler words like "folder", "files", "file" for actual name matching
+            string strippedName = System.Text.RegularExpressions.Regex.Replace(cleanQuery, @"\b(?:folder|directory|files|file)\b", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase).Trim();
+            if (string.IsNullOrWhiteSpace(strippedName))
+            {
+                strippedName = cleanQuery;
+            }
+
+            // Extension filter mapping (e.g. "PDFs" -> .pdf, "images" -> .png, .jpg)
+            string lowerQuery = strippedName.ToLowerInvariant();
+            List<string> extensionFilters = new();
+            if (lowerQuery == "pdf" || lowerQuery == "pdfs")
+            {
+                extensionFilters.Add(".pdf");
+            }
+            else if (lowerQuery == "word" || lowerQuery == "docs" || lowerQuery == "doc")
+            {
+                extensionFilters.AddRange([".docx", ".doc"]);
+            }
+            else if (lowerQuery == "excel" || lowerQuery == "sheets")
+            {
+                extensionFilters.AddRange([".xlsx", ".xls", ".csv"]);
+            }
+            else if (lowerQuery == "images" || lowerQuery == "photos" || lowerQuery == "pictures")
+            {
+                extensionFilters.AddRange([".png", ".jpg", ".jpeg"]);
+            }
+
+            var tokens = strippedName.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                     .Where(t => t.Length > 2)
+                                     .ToArray();
+
+            // 1. If user explicitly asked for a folder, check directories first
+            if (userWantsFolder)
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(dir, "*", options))
+                {
+                    string dirName = Path.GetFileName(subDir);
+                    if (dirName.Contains(strippedName, StringComparison.OrdinalIgnoreCase) ||
+                        (tokens.Length > 0 && tokens.Any(t => dirName.Contains(t, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        matches.Add(subDir);
+                        if (matches.Count >= maxResults) return matches;
+                    }
+                }
+            }
+
+            // 2. Scan files
             foreach (var file in Directory.EnumerateFiles(dir, "*", options))
             {
                 string fileName = Path.GetFileName(file);
 
+                // Extension match
+                if (extensionFilters.Count > 0)
+                {
+                    if (extensionFilters.Any(ext => fileName.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        matches.Add(file);
+                        if (matches.Count >= maxResults) break;
+                    }
+                    continue;
+                }
+
                 // Exact phrase match
-                if (fileName.Contains(query, StringComparison.OrdinalIgnoreCase))
+                if (fileName.Contains(strippedName, StringComparison.OrdinalIgnoreCase))
                 {
                     matches.Add(file);
                     if (matches.Count >= maxResults) break;
                     continue;
                 }
 
-                // Any keyword match
+                // Token match
                 if (tokens.Length > 0 && tokens.Any(t => fileName.Contains(t, StringComparison.OrdinalIgnoreCase)))
                 {
                     matches.Add(file);
                     if (matches.Count >= maxResults) break;
+                }
+            }
+
+            // 3. If no files matched and folder wasn't checked yet, check directories as fallback
+            if (matches.Count == 0 && !userWantsFolder)
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(dir, "*", options))
+                {
+                    string dirName = Path.GetFileName(subDir);
+                    if (dirName.Contains(strippedName, StringComparison.OrdinalIgnoreCase) ||
+                        (tokens.Length > 0 && tokens.Any(t => dirName.Contains(t, StringComparison.OrdinalIgnoreCase))))
+                    {
+                        matches.Add(subDir);
+                        if (matches.Count >= maxResults) break;
+                    }
                 }
             }
         }

@@ -9,28 +9,28 @@ namespace Orbit.Services.Voice;
 public interface IWhisperModelManager
 {
     /// <summary>
-    /// Gets the absolute local file path where the default Whisper Base.en GGML model is stored.
+    /// Gets the absolute local file path where the primary Whisper Small.en GGML model is stored.
     /// </summary>
     string ModelPath { get; }
 
     /// <summary>
-    /// Gets the absolute local file path where the fallback Whisper Tiny.en GGML model is stored.
+    /// Gets the absolute local file path where the fallback Whisper Base.en or Tiny.en GGML model is stored.
     /// </summary>
     string FallbackModelPath { get; }
 
     /// <summary>
-    /// Checks whether the default Base model exists on local disk and is fully downloaded.
+    /// Checks whether the primary Small model exists on local disk and is valid.
     /// </summary>
     bool IsModelAvailable { get; }
 
     /// <summary>
-    /// Checks whether the fallback Tiny model exists on local disk and is valid.
+    /// Checks whether any fallback model (Base or Tiny) exists on local disk and is valid.
     /// </summary>
     bool IsFallbackAvailable { get; }
 
     /// <summary>
-    /// Ensures the default Base model is present on disk (downloading it if missing).
-    /// If Base model download fails, falls back gracefully to Tiny if available.
+    /// Ensures the primary Small model is present on disk (downloading it if missing).
+    /// If Small model download fails, falls back gracefully to Base or Tiny if available.
     /// Returns the verified absolute path to the model file to use.
     /// </summary>
     Task<string> EnsureModelAvailableAsync(CancellationToken cancellationToken = default);

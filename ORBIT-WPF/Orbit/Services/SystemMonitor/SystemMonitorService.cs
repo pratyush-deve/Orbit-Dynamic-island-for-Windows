@@ -67,6 +67,21 @@ public sealed class SystemMonitorService : ISystemMonitorService
         public double doubleValue;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;
+        public byte BatteryFlag;
+        public byte BatteryLifePercent;
+        public byte SystemStatusFlag;
+        public int BatteryLifeTime;
+        public int BatteryFullLifeTime;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
+
     public event Action<SystemMetrics>? MetricsUpdated;
 
     private readonly object _lock = new();
@@ -147,6 +162,25 @@ public sealed class SystemMonitorService : ISystemMonitorService
     {
         lock (_lock)
         {
+            if (_lastRamTotalGb <= 0)
+            {
+                SampleRam();
+            }
+
+            int batteryPercent = -1;
+            bool isCharging = false;
+            bool isOnBattery = false;
+
+            if (GetSystemPowerStatus(out var power))
+            {
+                if (power.BatteryLifePercent <= 100)
+                {
+                    batteryPercent = power.BatteryLifePercent;
+                }
+                isCharging = (power.BatteryFlag & 8) != 0;
+                isOnBattery = power.ACLineStatus == 0;
+            }
+
             return new SystemMetrics(
                 CpuUsagePercent: _lastCpuPercent,
                 RamUsedGb: _lastRamUsedGb,
@@ -154,7 +188,10 @@ public sealed class SystemMonitorService : ISystemMonitorService
                 RamUsagePercent: _lastRamPercent,
                 WifiDownloadSpeedBps: _lastDownloadSpeedBps,
                 WifiUploadSpeedBps: _lastUploadSpeedBps,
-                GpuUsagePercent: _lastGpuPercent);
+                GpuUsagePercent: _lastGpuPercent,
+                BatteryPercent: batteryPercent,
+                IsCharging: isCharging,
+                IsOnBattery: isOnBattery);
         }
     }
 

@@ -78,6 +78,7 @@ public partial class DevAppCard : UserControl
         }
 
         TxtAppName.Text = App.Name;
+        ToolTip = $"{App.Name} ({App.ExecutablePath})";
 
         if (App.Icon != null)
         {

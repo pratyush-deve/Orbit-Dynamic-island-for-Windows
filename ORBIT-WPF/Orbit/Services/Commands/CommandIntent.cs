@@ -8,10 +8,13 @@ public enum CommandType
     Unknown,
     LaunchApp,
     WebSearch,
+    WebsiteSearch,
     FileSearch,
     SystemControl,
     Screenshot,
-    TakeNote
+    TakeNote,
+    Clarification,
+    SystemMetrics
 }
 
 /// <summary>
@@ -27,6 +30,18 @@ public enum SystemControlAction
 }
 
 /// <summary>
+/// Subtype of system metrics query (RAM, CPU, Battery, All).
+/// </summary>
+public enum SystemMetricsSubtype
+{
+    All,
+    Ram,
+    Cpu,
+    Battery,
+    Gpu
+}
+
+/// <summary>
 /// Deterministic, structured voice command intent parsed from speech transcription.
 /// </summary>
 public record CommandIntent(
@@ -36,6 +51,10 @@ public record CommandIntent(
     string? Target = null,
     SystemControlAction? ControlAction = null,
     int? Value = null,
-    string? Scope = null
+    string? Scope = null,
+    string? Query = null,
+    CommandIntent? PendingAction = null,
+    string? ClarificationPrompt = null,
+    SystemMetricsSubtype? MetricsSubtype = null
 );
 

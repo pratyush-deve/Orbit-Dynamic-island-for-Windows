@@ -17,7 +17,7 @@ public sealed class VoiceActivityDetector
 {
     private const string LogCategory = "VAD";
 
-    public double InitialSilenceTimeoutSeconds { get; set; } = 2.5;
+    public double InitialSilenceTimeoutSeconds { get; set; } = 4.5;
     public double TrailingSilenceTimeoutSeconds { get; set; } = 1.8;
     public double MaxDurationSeconds { get; set; } = 15.0;
 
