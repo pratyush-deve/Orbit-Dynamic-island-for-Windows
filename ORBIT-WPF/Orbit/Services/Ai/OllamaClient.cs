@@ -31,7 +31,7 @@ public interface IOllamaClient : IDisposable
 public sealed class OllamaClient : IOllamaClient
 {
     private const string LogCategory = "OLLAMA_CLIENT";
-    private const string DefaultEndpoint = "http://localhost:11434";
+    private const string DefaultEndpoint = "http://127.0.0.1:11434";
     private readonly HttpClient _httpClient;
     private bool _isServiceAvailable;
     private bool _disposed;

@@ -103,7 +103,8 @@ public sealed class OrbitApplication : IDisposable
         services.AddSingleton<ICommandHandler, GenerateCodeHandler>();
         services.AddSingleton<IVoiceCommandExecutor, CommandExecutionService>();
 
-        // 8.7 Local AI Assistant (Ollama, Model Lifecycle, AI Assistant Service)
+        // 8.7 Local AI Assistant (Ollama Server Manager, Ollama Client, Model Lifecycle, AI Assistant Service)
+        services.AddSingleton<IOllamaServerManager, OllamaServerManager>();
         services.AddSingleton<IOllamaClient, OllamaClient>();
         services.AddSingleton<IModelLifecycleManager, ModelLifecycleManager>();
         services.AddSingleton<IAiAssistantService, AiAssistantService>();
@@ -138,6 +139,7 @@ public sealed class OrbitApplication : IDisposable
             _serviceProvider.GetService<IAntigravityDatabaseObserver>()?.Dispose();
             _serviceProvider.GetService<IAntigravityProcessMonitor>()?.Dispose();
             _serviceProvider.GetService<IAntigravityTranscriptWatcher>()?.Dispose();
+            _serviceProvider.GetService<IOllamaServerManager>()?.Dispose();
             _serviceProvider.GetService<IVoiceSessionManager>()?.Dispose();
             _serviceProvider.Dispose();
         }

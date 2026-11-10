@@ -83,6 +83,8 @@
             <RowDefinition Height="Auto"/>
             <!-- Row 1: Content Area -->
             <RowDefinition Height="Auto"/>
+            <!-- Row 2: Ollama Local Server Status -->
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <!-- Top Header Navigation -->
@@ -290,5 +292,50 @@
                 </Border>
             </Grid>
         </Grid>
+
+        <!-- Row 2: Local Ollama AI Server Status -->
+        <Border x:Name="BorderOllamaStatus"
+                Grid.Row="2"
+                Margin="0,5,0,0"
+                Background="#160F25"
+                BorderBrush="#2D1D4A"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="8,3.5">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse x:Name="DotOllamaStatus" Width="6" Height="6" Fill="#A855F7" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBlock Text="Local Ollama AI:"
+                               FontSize="9.5"
+                               FontWeight="SemiBold"
+                               Foreground="#C4B5FD"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtOllamaModelInfo"
+                               Text="qwen2.5:3b"
+                               FontSize="9"
+                               Foreground="#8B7A9F"
+                               VerticalAlignment="Center"
+                               Margin="5,0,0,0"
+                               TextTrimming="CharacterEllipsis"
+                               MaxWidth="210"/>
+                </StackPanel>
+
+                <!-- Status Badge -->
+                <Border x:Name="BadgeOllamaStatus"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        CornerRadius="6"
+                        Padding="6,1.5"
+                        Background="#201633"
+                        BorderBrush="#3D295F"
+                        BorderThickness="1">
+                    <TextBlock x:Name="TxtOllamaStatus"
+                               Text="UNAVAILABLE"
+                               FontSize="8"
+                               FontWeight="Bold"
+                               Foreground="#8B7A9F"/>
+                </Border>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>

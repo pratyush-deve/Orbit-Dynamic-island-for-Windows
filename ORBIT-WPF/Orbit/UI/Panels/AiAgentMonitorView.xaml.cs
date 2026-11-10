@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Orbit.Core;
 using Orbit.Models;
+using Orbit.Services.Ai;
 using Orbit.Services.AiObserver;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
@@ -15,7 +16,7 @@ namespace Orbit.UI.Panels;
 /// <summary>
 /// Interaction logic for AiAgentMonitorView.xaml.
 /// Content-driven, responsive AI Activity Monitor displaying currently running Antigravity applications
-/// with clean WORKING / IDLE / DONE states, dynamic height calculation, and instant window activation.
+/// with clean WORKING / IDLE / DONE states, local Ollama server status & model readiness, and instant window activation.
 /// </summary>
 public partial class AiAgentMonitorView : UserControl, IDisposable
 {
@@ -25,6 +26,7 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
     public event Action<double>? DesiredHeightChanged;
 
     private IAgentStateManager? _stateManager;
+    private IOllamaServerManager? _ollamaManager;
     private bool _disposed;
 
     // Window layout constants
@@ -46,6 +48,10 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
     private readonly SolidColorBrush _brushAttentionFg = new((Color)ColorConverter.ConvertFromString("#F87171"));
     private readonly SolidColorBrush _brushAttentionBorder = new((Color)ColorConverter.ConvertFromString("#EF4444"));
 
+    private readonly SolidColorBrush _brushRecoveringBg = new((Color)ColorConverter.ConvertFromString("#362509"));
+    private readonly SolidColorBrush _brushRecoveringFg = new((Color)ColorConverter.ConvertFromString("#FBBF24"));
+    private readonly SolidColorBrush _brushRecoveringBorder = new((Color)ColorConverter.ConvertFromString("#D97706"));
+
     private readonly SolidColorBrush _brushIdleBg = new((Color)ColorConverter.ConvertFromString("#201633"));
     private readonly SolidColorBrush _brushIdleFg = new((Color)ColorConverter.ConvertFromString("#8B7A9F"));
     private readonly SolidColorBrush _brushIdleBorder = new((Color)ColorConverter.ConvertFromString("#3D295F"));
@@ -56,10 +62,17 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         Loaded += (s, e) => DesiredHeightChanged?.Invoke(GetDesiredHeight());
     }
 
-    public void Initialize(IAgentStateManager stateManager)
+    public void Initialize(IAgentStateManager stateManager, IOllamaServerManager? ollamaManager = null)
     {
         _stateManager = stateManager;
         _stateManager.StateUpdated += OnStateUpdated;
+
+        _ollamaManager = ollamaManager;
+        if (_ollamaManager != null)
+        {
+            _ollamaManager.StatusChanged += OnOllamaStatusChanged;
+            UpdateOllamaStatus(_ollamaManager.Status, _ollamaManager.IsModelReady, _ollamaManager.ModelDiagnosticMessage);
+        }
 
         UpdateUI(_stateManager.AntigravitySession, _stateManager.AntigravityIdeSession);
     }
@@ -271,6 +284,69 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         }
     }
 
+    private void OnOllamaStatusChanged(OllamaServerStatus status, string? diagnostic)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            UpdateOllamaStatus(status, _ollamaManager?.IsModelReady ?? false, diagnostic);
+        });
+    }
+
+    public void UpdateOllamaStatus(OllamaServerStatus status, bool isModelReady, string? diagnosticMsg)
+    {
+        switch (status)
+        {
+            case OllamaServerStatus.Starting:
+                TxtOllamaStatus.Text = "STARTING";
+                TxtOllamaStatus.Foreground = _brushWorkingFg;
+                BadgeOllamaStatus.Background = _brushWorkingBg;
+                BadgeOllamaStatus.BorderBrush = _brushWorkingBorder;
+                DotOllamaStatus.Fill = _brushWorkingFg;
+                TxtOllamaModelInfo.Text = "Connecting...";
+                TxtOllamaModelInfo.Foreground = _brushWorkingFg;
+                break;
+
+            case OllamaServerStatus.Running:
+                TxtOllamaStatus.Text = "RUNNING";
+                TxtOllamaStatus.Foreground = _brushDoneFg;
+                BadgeOllamaStatus.Background = _brushDoneBg;
+                BadgeOllamaStatus.BorderBrush = _brushDoneBorder;
+                DotOllamaStatus.Fill = _brushDoneFg;
+                if (isModelReady)
+                {
+                    TxtOllamaModelInfo.Text = "qwen2.5:3b (Ready)";
+                    TxtOllamaModelInfo.Foreground = _brushDoneFg;
+                }
+                else
+                {
+                    TxtOllamaModelInfo.Text = "qwen2.5:3b (Missing)";
+                    TxtOllamaModelInfo.Foreground = _brushAttentionFg;
+                }
+                break;
+
+            case OllamaServerStatus.Recovering:
+                TxtOllamaStatus.Text = "RECOVERING";
+                TxtOllamaStatus.Foreground = _brushRecoveringFg;
+                BadgeOllamaStatus.Background = _brushRecoveringBg;
+                BadgeOllamaStatus.BorderBrush = _brushRecoveringBorder;
+                DotOllamaStatus.Fill = _brushRecoveringFg;
+                TxtOllamaModelInfo.Text = "Reconnecting...";
+                TxtOllamaModelInfo.Foreground = _brushRecoveringFg;
+                break;
+
+            case OllamaServerStatus.Unavailable:
+            default:
+                TxtOllamaStatus.Text = "UNAVAILABLE";
+                TxtOllamaStatus.Foreground = _brushAttentionFg;
+                BadgeOllamaStatus.Background = _brushAttentionBg;
+                BadgeOllamaStatus.BorderBrush = _brushAttentionBorder;
+                DotOllamaStatus.Fill = _brushAttentionFg;
+                TxtOllamaModelInfo.Text = !string.IsNullOrWhiteSpace(diagnosticMsg) ? diagnosticMsg : "Offline";
+                TxtOllamaModelInfo.Foreground = _brushIdleFg;
+                break;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -278,6 +354,10 @@ public partial class AiAgentMonitorView : UserControl, IDisposable
         if (_stateManager != null)
         {
             _stateManager.StateUpdated -= OnStateUpdated;
+        }
+        if (_ollamaManager != null)
+        {
+            _ollamaManager.StatusChanged -= OnOllamaStatusChanged;
         }
     }
 }

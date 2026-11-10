@@ -83,6 +83,7 @@ public partial class MainWindow : Window
     private readonly ICommandParser? _commandParser;
     private readonly IVoiceCommandExecutor? _commandExecutor;
     private readonly IAiAssistantService? _aiAssistantService;
+    private readonly IOllamaServerManager? _ollamaServerManager;
 
     // AI Response Bubble & Generation state management
     public const double AiResponseBubbleWidth = 380.0;
@@ -231,7 +232,8 @@ public partial class MainWindow : Window
         IVoiceSessionManager? voiceSessionManager = null,
         ICommandParser? commandParser = null,
         IVoiceCommandExecutor? commandExecutor = null,
-        IAiAssistantService? aiAssistantService = null)
+        IAiAssistantService? aiAssistantService = null,
+        Orbit.Services.Ai.IOllamaServerManager? ollamaServerManager = null)
     {
         InitializeComponent();
 
@@ -255,6 +257,7 @@ public partial class MainWindow : Window
         _commandParser = commandParser;
         _commandExecutor = commandExecutor;
         _aiAssistantService = aiAssistantService;
+        _ollamaServerManager = ollamaServerManager;
 
         // Wire AI Assistant events
         if (_aiAssistantService != null)
@@ -382,7 +385,7 @@ public partial class MainWindow : Window
         };
 
         // Initialize active apps manager, system controls, dev workspace, AI agent monitor, social/work hubs, and responsive height changes
-        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService, _notesService, _systemMonitorService);
+        IslandPanel.Initialize(_windowManager, _systemControlsService, _devWorkspaceService, _agentStateManager, _attentionManager, _socialHubService, _workHubService, _notesService, _systemMonitorService, _ollamaServerManager);
         IslandPanel.DesiredHeightChanged += OnIslandDesiredHeightChanged;
         IslandPanel.NotesModeChanged += OnNotesModeChanged;
 

@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Orbit.Core;
 using Orbit.Platform.Windows;
 using Orbit.Services;
+using Orbit.Services.Ai;
 using Orbit.Services.Voice;
 
 namespace Orbit;
@@ -106,6 +107,20 @@ public partial class App : Application
             catch (Exception ex)
             {
                 OrbitLogger.Warn(LogCategory, $"Background Whisper model initialization deferred: {ex.Message}");
+            }
+        });
+
+        // Initialize and verify local Ollama server in background (non-blocking, reuses existing delay)
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var ollamaManager = _orbitApp.GetService<IOllamaServerManager>();
+                await ollamaManager.InitializeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                OrbitLogger.Warn(LogCategory, $"Background Ollama server initialization deferred: {ex.Message}");
             }
         });
 

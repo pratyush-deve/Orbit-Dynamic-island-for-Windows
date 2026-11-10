@@ -41,6 +41,7 @@ public sealed class AiAssistantService : IAiAssistantService
     private readonly IVoiceCommandExecutor? _commandExecutor;
     private readonly Orbit.Services.SystemMonitor.ISystemMonitorService? _systemMonitorService;
     private readonly ICodeGenerationService _codeGenService;
+    private readonly IOllamaServerManager? _ollamaServerManager;
     private readonly object _stateLock = new();
     private readonly List<AiChatMessage> _conversationHistory = new();
 
@@ -87,7 +88,8 @@ public sealed class AiAssistantService : IAiAssistantService
         ICommandParser? commandParser = null,
         IVoiceCommandExecutor? commandExecutor = null,
         Orbit.Services.SystemMonitor.ISystemMonitorService? systemMonitorService = null,
-        ICodeGenerationService? codeGenService = null)
+        ICodeGenerationService? codeGenService = null,
+        IOllamaServerManager? ollamaServerManager = null)
     {
         _ollamaClient = ollamaClient ?? throw new ArgumentNullException(nameof(ollamaClient));
         _lifecycleManager = lifecycleManager ?? throw new ArgumentNullException(nameof(lifecycleManager));
@@ -96,6 +98,7 @@ public sealed class AiAssistantService : IAiAssistantService
         _commandExecutor = commandExecutor;
         _systemMonitorService = systemMonitorService;
         _codeGenService = codeGenService ?? new CodeGenerationService();
+        _ollamaServerManager = ollamaServerManager;
     }
 
     private string BuildSystemPrompt()
@@ -234,14 +237,29 @@ Guidelines:
 
         try
         {
-            // Verify Ollama health first
+            // Verify Ollama health first, attempting server startup or recovery if offline
             bool healthy = await _ollamaClient.CheckServiceHealthAsync(linkedCts.Token).ConfigureAwait(false);
+            if (!healthy && _ollamaServerManager != null)
+            {
+                OrbitLogger.Info(LogCategory, "Ollama client reported offline. Triggering server startup/recovery check...");
+                healthy = await _ollamaServerManager.EnsureServerRunningAsync(linkedCts.Token).ConfigureAwait(false);
+            }
+
             if (!healthy)
             {
                 string offlineMsg = "Ollama is currently offline. Please ensure Ollama is running on your machine.";
                 OrbitLogger.Warn(LogCategory, offlineMsg);
                 GenerationFailed?.Invoke(offlineMsg);
                 return offlineMsg;
+            }
+
+            // Verify model readiness
+            if (_ollamaServerManager != null && !_ollamaServerManager.IsModelReady)
+            {
+                string modelMsg = _ollamaServerManager.ModelDiagnosticMessage ?? "Model 'qwen2.5:3b' is not installed in local Ollama library.";
+                OrbitLogger.Warn(LogCategory, modelMsg);
+                GenerationFailed?.Invoke(modelMsg);
+                return modelMsg;
             }
 
             var messages = new List<AiChatMessage>

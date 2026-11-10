@@ -159,7 +159,8 @@ public partial class ExpandedIsland : UserControl
         ISocialHubService? socialHubService = null,
         IWorkHubService? workHubService = null,
         INotesService? notesService = null,
-        ISystemMonitorService? systemMonitorService = null)
+        ISystemMonitorService? systemMonitorService = null,
+        Orbit.Services.Ai.IOllamaServerManager? ollamaServerManager = null)
     {
         ActiveAppsPanel.Initialize(windowManager);
         if (controlsService != null)
@@ -174,7 +175,7 @@ public partial class ExpandedIsland : UserControl
         if (agentStateManager != null)
         {
             _agentStateManager = agentStateManager;
-            AiMonitorPanel.Initialize(agentStateManager);
+            AiMonitorPanel.Initialize(agentStateManager, ollamaServerManager);
         }
         if (socialHubService != null)
         {

@@ -62,14 +62,7 @@ public sealed class StartupRegistrationService : IStartupRegistrationService
     /// </summary>
     public static string GetTargetExecutablePath()
     {
-        // 1. Check known stable release location in the Orbit 2 repository
-        string defaultRelease = @"C:\Users\KIIT\OneDrive\Desktop\Orbit 2\publish\Orbit.exe";
-        if (File.Exists(defaultRelease))
-        {
-            return Path.GetFullPath(defaultRelease);
-        }
-
-        // 2. Check current process path if running from a publish directory
+        // 1. Check current process path if running from a publish directory
         string? currentPath = Environment.ProcessPath;
         if (!string.IsNullOrWhiteSpace(currentPath) && File.Exists(currentPath))
         {
@@ -79,7 +72,21 @@ public sealed class StartupRegistrationService : IStartupRegistrationService
             }
         }
 
-        // 3. Fallback to current process path if available
+        // 2. Check known stable release location in the ORBIT-WPF publish directory
+        string defaultRelease = @"C:\Users\KIIT\OneDrive\Desktop\Orbit 2\ORBIT-WPF\publish\Orbit.exe";
+        if (File.Exists(defaultRelease))
+        {
+            return Path.GetFullPath(defaultRelease);
+        }
+
+        // 3. Fallback to root publish directory if present
+        string rootRelease = @"C:\Users\KIIT\OneDrive\Desktop\Orbit 2\publish\Orbit.exe";
+        if (File.Exists(rootRelease))
+        {
+            return Path.GetFullPath(rootRelease);
+        }
+
+        // 4. Fallback to current process path if available
         return !string.IsNullOrWhiteSpace(currentPath) ? Path.GetFullPath(currentPath) : string.Empty;
     }
 
