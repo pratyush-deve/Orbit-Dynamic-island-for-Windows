@@ -104,6 +104,8 @@ public partial class MainWindow : Window
     private bool _typewriterCompleted = false;
 
     private IntPtr _hwnd = IntPtr.Zero;
+    private IntPtr _foregroundWinEventHook = IntPtr.Zero;
+    private NativeMethods.WinEventDelegate? _foregroundWinEventDelegate;
     private Orbit.Models.AgentState _currentAgentState = Orbit.Models.AgentState.Idle;
     private string _currentAgentMessage = string.Empty;
 
@@ -333,6 +335,16 @@ public partial class MainWindow : Window
 
         _overlayService.InitializeWindowHandle(_hwnd);
 
+        _foregroundWinEventDelegate = OnSystemForegroundChanged;
+        _foregroundWinEventHook = NativeMethods.SetWinEventHook(
+            NativeMethods.EVENT_SYSTEM_FOREGROUND,
+            NativeMethods.EVENT_SYSTEM_FOREGROUND,
+            IntPtr.Zero,
+            _foregroundWinEventDelegate,
+            0,
+            0,
+            NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
+
         try
         {
             var iconUri = new Uri("pack://application:,,,/Assets/ORBIT.png", UriKind.Absolute);
@@ -342,6 +354,43 @@ public partial class MainWindow : Window
         {
             OrbitLogger.Warn(LogCategory, $"Could not assign window icon: {ex.Message}");
         }
+    }
+
+    private void EnsureOverlayZOrder()
+    {
+        if (_hwnd == IntPtr.Zero || _lifecycleService.CurrentState == CompanionState.Hidden)
+        {
+            return;
+        }
+
+        if (_isAnnotationModeActive && _annotationOverlayWindow != null && _annotationOverlayWindow.Hwnd != IntPtr.Zero)
+        {
+            _overlayService.ReapplyTopmost(_annotationOverlayWindow.Hwnd);
+        }
+
+        _overlayService.ReapplyTopmost(_hwnd);
+    }
+
+    private void OnSystemForegroundChanged(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+    {
+        if (eventType != NativeMethods.EVENT_SYSTEM_FOREGROUND || hwnd == IntPtr.Zero || hwnd == _hwnd)
+        {
+            return;
+        }
+
+        if (_lifecycleService.CurrentState == CompanionState.Hidden)
+        {
+            return;
+        }
+
+        EnsureOverlayZOrder();
+
+        // Packaged WinUI/MSIX apps (e.g. WhatsApp.Root) finish maximizing/re-parenting ~100ms after foreground activation
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(120);
+            EnsureOverlayZOrder();
+        });
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -511,7 +560,7 @@ public partial class MainWindow : Window
         OrbitLogger.Debug(LogCategory, $"Window deactivated. CurrentState = {_lifecycleService.CurrentState}");
 
         // Reapply topmost so ORBIT stays pinned to the top of the screen even when the user clicks into other applications
-        _overlayService.ReapplyTopmost(_hwnd);
+        EnsureOverlayZOrder();
 
         // The topbar, AI response bubble, QuickActions, Voice mode, Annotation mode, and FileDock remain ACTIVE
         // even when focus moves to another window (e.g. IDE, browser, terminal).
@@ -3011,12 +3060,7 @@ public partial class MainWindow : Window
                 _annotationOverlayWindow.SetTool(_currentAnnotationTool);
                 _annotationOverlayWindow.SetPenColor(_currentAnnotationColor);
 
-                _overlayService.ReapplyTopmost(_hwnd);
-                if (_annotationOverlayWindow.Hwnd != IntPtr.Zero)
-                {
-                    NativeMethods.SetWindowPos(_annotationOverlayWindow.Hwnd, _hwnd, 0, 0, 0, 0,
-                        NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
-                }
+                EnsureOverlayZOrder();
             }
         }
         catch (Exception ex)
@@ -3070,12 +3114,7 @@ public partial class MainWindow : Window
             QuickActionsBar.BeginAnimation(WidthProperty, null);
 
             UpdateUnifiedIslandGeometry(AnnotationToolbarWidth, QuickActionsHeight);
-            _overlayService.ReapplyTopmost(_hwnd);
-            if (_annotationOverlayWindow != null && _annotationOverlayWindow.Hwnd != IntPtr.Zero)
-            {
-                NativeMethods.SetWindowPos(_annotationOverlayWindow.Hwnd, _hwnd, 0, 0, 0, 0,
-                    NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
-            }
+            EnsureOverlayZOrder();
             OrbitLogger.Info(LogCategory, "Annotation toolbar horizontally expanded successfully.");
         };
 
@@ -3126,6 +3165,7 @@ public partial class MainWindow : Window
                 OrbitLogger.Warn(LogCategory, $"Failed to close annotation overlay: {ex.Message}");
             }
             _annotationOverlayWindow = null;
+            EnsureOverlayZOrder();
         }
 
         OrbitLogger.Info(LogCategory, $"Exiting annotation toolbar mode (returnToQuickActions={returnToQuickActions}, immediate={immediate}).");
@@ -3211,7 +3251,7 @@ public partial class MainWindow : Window
                 QuickActionsBar.BeginAnimation(WidthProperty, null);
 
                 UpdateUnifiedIslandGeometry(QuickActionsWidth, QuickActionsHeight);
-                _overlayService.ReapplyTopmost(_hwnd);
+                EnsureOverlayZOrder();
                 OrbitLogger.Info(LogCategory, "Restored Standard Quick Actions bar from Annotation mode.");
             };
 
@@ -3280,7 +3320,7 @@ public partial class MainWindow : Window
                 _isHoverCollapsing = false;
                 _isHovering = false;
 
-                _overlayService.ReapplyTopmost(_hwnd);
+                EnsureOverlayZOrder();
                 OrbitLogger.Info(LogCategory, "Annotation mode cleanly collapsed back to normal mascot.");
             };
 
@@ -3383,7 +3423,7 @@ public partial class MainWindow : Window
                 QuickActionsBar.BeginAnimation(WidthProperty, null);
 
                 UpdateUnifiedIslandGeometry(targetWidth, QuickActionsHeight);
-                _overlayService.ReapplyTopmost(_hwnd);
+                EnsureOverlayZOrder();
 
                 // Reveal tucked restore button
                 if (BtnTuckedAnnotationRestore != null)
@@ -3428,7 +3468,7 @@ public partial class MainWindow : Window
                 QuickActionsBar.BeginAnimation(WidthProperty, null);
 
                 UpdateUnifiedIslandGeometry(targetWidth, QuickActionsHeight);
-                _overlayService.ReapplyTopmost(_hwnd);
+                EnsureOverlayZOrder();
 
                 // Reveal full toolbar panel
                 AnnotationToolbarPanel.Visibility = Visibility.Visible;
@@ -4541,6 +4581,13 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        if (_foregroundWinEventHook != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWinEvent(_foregroundWinEventHook);
+            _foregroundWinEventHook = IntPtr.Zero;
+        }
+        _foregroundWinEventDelegate = null;
+
         if (_annotationOverlayWindow != null)
         {
             try

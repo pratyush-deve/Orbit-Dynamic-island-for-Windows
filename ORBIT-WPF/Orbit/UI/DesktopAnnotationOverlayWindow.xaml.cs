@@ -105,19 +105,23 @@ public partial class DesktopAnnotationOverlayWindow : Window
         try
         {
             var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            exStyle |= NativeMethods.WS_EX_TOPMOST;
             exStyle |= NativeMethods.WS_EX_TOOLWINDOW;
             exStyle |= NativeMethods.WS_EX_NOACTIVATE;
             exStyle &= ~NativeMethods.WS_EX_APPWINDOW;
 
             NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(exStyle));
 
-            // Place overlay behind MainWindow in topmost band if known, otherwise HWND_TOPMOST
-            var insertAfter = (_mainWindowHwnd != IntPtr.Zero && NativeMethods.IsWindow(_mainWindowHwnd))
-                ? _mainWindowHwnd
-                : NativeMethods.HWND_TOPMOST;
+            const uint swpFlags = NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_NOOWNERZORDER;
 
-            NativeMethods.SetWindowPos(_hwnd, insertAfter, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
+            // Promote overlay into topmost band first, then ensure MainWindow sits above it
+            NativeMethods.SetWindowPos(_hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                swpFlags | NativeMethods.SWP_FRAMECHANGED);
+
+            if (_mainWindowHwnd != IntPtr.Zero && NativeMethods.IsWindow(_mainWindowHwnd))
+            {
+                NativeMethods.SetWindowPos(_mainWindowHwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, swpFlags);
+            }
         }
         catch (Exception ex)
         {
@@ -228,6 +232,7 @@ public partial class DesktopAnnotationOverlayWindow : Window
         try
         {
             var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE).ToInt64();
+            exStyle |= NativeMethods.WS_EX_TOPMOST;
             if (enable)
             {
                 exStyle |= NativeMethods.WS_EX_TRANSPARENT;

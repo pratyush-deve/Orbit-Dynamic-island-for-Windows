@@ -95,6 +95,7 @@ public static class NativeMethods
     public const uint DESKTOP_WRITEOBJECTS = 0x0080;
 
     // --- WinEvent Hook Constants ---
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     public const uint EVENT_OBJECT_CREATE = 0x8000;
     public const uint EVENT_OBJECT_DESTROY = 0x8001;
     public const uint EVENT_OBJECT_SHOW = 0x8002;

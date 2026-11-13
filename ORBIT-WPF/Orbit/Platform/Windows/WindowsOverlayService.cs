@@ -39,8 +39,9 @@ public sealed class WindowsOverlayService : IWindowsOverlayService
 
             NativeMethods.SetWindowLongPtr(hwnd, NativeMethods.GWL_EXSTYLE, new IntPtr(exStyle));
 
-            // Set topmost without activating immediately
-            SetTopmost(hwnd, true);
+            // Apply style changes cleanly once, then promote to topmost without activating
+            NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
 
             OrbitLogger.Info(LogCategory, $"Initialized HWND 0x{hwnd:X} with ToolWindow and Topmost flags.");
         }
@@ -52,13 +53,13 @@ public sealed class WindowsOverlayService : IWindowsOverlayService
 
     public void SetTopmost(IntPtr hwnd, bool topmost)
     {
-        if (hwnd == IntPtr.Zero) return;
+        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
 
         var targetHwnd = topmost ? NativeMethods.HWND_TOPMOST : NativeMethods.HWND_NOTOPMOST;
         const uint flags = NativeMethods.SWP_NOMOVE |
                            NativeMethods.SWP_NOSIZE |
                            NativeMethods.SWP_NOACTIVATE |
-                           NativeMethods.SWP_FRAMECHANGED;
+                           NativeMethods.SWP_NOOWNERZORDER;
 
         var success = NativeMethods.SetWindowPos(hwnd, targetHwnd, 0, 0, 0, 0, flags);
         if (!success)
@@ -74,7 +75,24 @@ public sealed class WindowsOverlayService : IWindowsOverlayService
 
     public void ReapplyTopmost(IntPtr hwnd)
     {
-        SetTopmost(hwnd, true);
+        if (hwnd == IntPtr.Zero || !NativeMethods.IsWindow(hwnd)) return;
+
+        const uint flags = NativeMethods.SWP_NOMOVE |
+                           NativeMethods.SWP_NOSIZE |
+                           NativeMethods.SWP_NOACTIVATE |
+                           NativeMethods.SWP_NOOWNERZORDER;
+
+        NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+        var success = NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0, flags);
+        if (!success)
+        {
+            var err = Marshal.GetLastWin32Error();
+            OrbitLogger.Warn(LogCategory, $"ReapplyTopmost SetWindowPos failed with Win32 error: {err}");
+        }
+        else
+        {
+            OrbitLogger.Debug(LogCategory, $"ReapplyTopmost applied to HWND 0x{hwnd:X}.");
+        }
     }
 
     public void BringToFront(IntPtr hwnd)
